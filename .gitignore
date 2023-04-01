@@ -1,5 +1,6 @@
 dist
 dist-*
+newdist
 cabal-dev
 *.o
 *.hi
