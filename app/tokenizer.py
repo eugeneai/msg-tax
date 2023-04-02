@@ -1,5 +1,10 @@
 import ucto
 from json import load, loads, dumps
+import pymorphy2
+import inspect
+
+if not hasattr(inspect, 'getargspec'):
+    inspect.getargspec = inspect.getfullargspec
 
 TOPICS = """seo — SEO
 buhtg — Бухгалтерия, источник — ТГ
@@ -57,10 +62,48 @@ def gen(filename):
         yield e
 
 
+morph = pymorphy2.MorphAnalyzer(lang='ru')
+
+
+def morphy(tok):
+    s = str(tok)
+    t = tok.tokentype
+    p = morph.parse(s)
+    f = p[0]
+    ml = str(f.tag).split(",")
+    mln = []
+    for ttt in ml:
+        if " " in ttt:
+            mln.append([_.lower() for _ in ttt.split()])
+        else:
+            mln.append(ttt.lower())
+    d = {"norm": f.normal_form, "tag": mln}
+    return d
+
+
+configfile = "tokconfig-rus"
+
+
+def tokenize(t):
+    tokenizer = ucto.Tokenizer(configfile)
+    tokenizer.process(t)
+    toks = []
+    for tok in tokenizer:
+        # toks.append(tok)
+        s = str(tok)
+        tt = tok.tokentype
+        o = {"w": s, "ucto": tt.lower()}
+        if tt in ["WORD", "WORD-COMPOUND"]:
+            o["morph"] = morphy(tok)
+        toks.append(o)
+
+    return toks
+
+
 if __name__ == "__main__":
     prepDT()
     # print(DT.keys())
-    for js in gen("../data/posts.json"):
+    for js in gen("data/posts.json"):
         try:
             t = js["text"]
             s = js["subjects"]
@@ -71,9 +114,10 @@ if __name__ == "__main__":
                 # dc.update(v)
                 dc["tax"] = v["classes"]
                 li.append(dc)
-
-            njs = {"text": t, "subjects": li}
+            nt = tokenize(t)
+            njs = {"text": nt, "subjects": li}
             print(dumps(njs, ensure_ascii=False))
         except KeyError:
             print("BAD")
             print(dumps(js, ensure_ascii=False))
+        break

@@ -6,5 +6,5 @@ import Prelude
 
 main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!" >> putStrLn "!!!"
-  -- MyLib.someFunc
+  d <- getContents
+  putStr d
