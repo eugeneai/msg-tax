@@ -1,4 +1,4 @@
-.PHONY: run build check
+.PHONY: run build check prep
 
 PYTARGET=app/tokenizer.py
 
@@ -10,3 +10,6 @@ build:
 
 check: $(PYTARGET)
 	python -m py_compile $^
+
+prep: check
+	python $(PYTARGET)
