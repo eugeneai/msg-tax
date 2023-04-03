@@ -1,6 +1,7 @@
-.PHONY: run build check prep
+.PHONY: run build check prep repl
 
 PYTARGET=app/tokenizer.py
+PKG=msg-tax
 
 run: build check
 	python $(PYTARGET) | cabal run
@@ -13,3 +14,6 @@ check: $(PYTARGET)
 
 prep: check
 	python $(PYTARGET)
+
+repl: build
+	cabal v2-repl exe:$(PKG)
