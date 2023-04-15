@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module Main (translate, main) where
+module Main (main) where
 
 import Prelude.Compat
     ( print,
@@ -17,6 +17,10 @@ import Prelude.Compat
       ($),
       putStrLn,
       FilePath )
+import qualified Data.Text as T
+import qualified Control.Applicative as CA
+import qualified Data.Text.IO as TIO
+-- import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BL
 import GHC.Generics (Generic)
 import System.IO
@@ -24,23 +28,27 @@ import System.IO ( print, IO, putStrLn, FilePath )
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Text
+import qualified Text.Show.Unicode as US
+
+type MText = T.Text -- MText T.Text deriving (Show)
+
 data Subject = Subject {
-  name:: Text,
-  tax:: Text
+  name:: MText,
+  tax:: MText
   } deriving (Show, Generic)
 
 data MessageMorphTag = Tag String | Tags [String]
   deriving (Show, Generic)
 
 data MessageMorph = Morph {
-    norm:: Text
+    norm:: MText
   , tag:: (Maybe Value)
 --  , tag:: (Maybe MessageMorphTag)
   } deriving (Show, Generic)
 
 data MessageText = Text {
-    w:: Text
-  , ucto:: Text
+    w:: MText
+  , ucto:: MText
   , morph:: (Maybe MessageMorph)
   } deriving (Show, Generic)
 
@@ -49,6 +57,17 @@ data Message = Message {
   , subjects:: (Maybe [Subject])
   } deriving (Show, Generic)
 
+
+-- instance FromJSON MText where
+--   parseJSON (String t) = CA.pure $ tx
+--     where
+--       tx = t
+-- --      tx = MText (t)
+--   parseJSON _ = CA.empty
+
+-- instance ToJSON MText where
+-- --  toJSON (MText t) = String t
+--   toJSON t = String t
 
 instance FromJSON Subject
 instance FromJSON Message
@@ -74,8 +93,6 @@ instance ToJSON MessageMorphTag
 --   d <- getContents
 --   putStr d
 
-translate :: BL.ByteString -> Maybe Message
-translate = decode
 
 translateFile:: FilePath -> IO ()
 translateFile filePath = do
@@ -89,4 +106,4 @@ main = do
   js <- BL.getContents
   -- BL.putStrLn js
   let obj = decode js::Maybe Message
-  print obj
+  US.uprint obj
