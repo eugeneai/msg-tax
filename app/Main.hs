@@ -17,11 +17,11 @@ main = do
   putStrLn "\n\n"
   US.uprint . NL.toNorm $ obj
   putStrLn "\n-------------\n"
---   let tran = NL.toJoin obj
--- --  let joinRule = NL.join NL.AdjNoun
---   case tran of
---     Nothing -> print "No parse"
---     Just a -> do
---       let appl = NL.joinPass NL.AdjNoun a
+  let tran = NL.toJoin obj
+  let joinRule = NL.join NL.AdjNoun
+  case tran of
+    Nothing -> print "No parse"
+    Just appl -> do
+      let appl1 = NL.joinPass NL.AdjNoun appl
+      US.uprint appl1
 --       let appl2 = NL.joinPass NL.SubjVerb appl
---       US.uprint appl2
