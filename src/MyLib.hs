@@ -203,12 +203,9 @@ applyRule r (a:b:l) = rc
 -- Simple Grammar rules
 
 instance Rule Connection where
-  join AdjNoun (J Next adj) (J Next noun)
-    | isAdj adj && isNoun noun && adjNounConsist adj noun = Just (J AdjNoun (adj ++ noun))
-  join AdjNoun (J Next adj) (J AdjNoun an)
-    | isAdj adj && adjNounConsist adj an = Just (J AdjNoun (adj ++ an))
-  join AdjNoun _ _ = Nothing
-
+  join AdjNoun adj noun
+    | isAdj adj && isNoun noun && adjNounConsist adj noun = Just (J AdjNoun [adj, noun])
+  join AdjNoun a b = Nothing
   join _ _ _ = Nothing
 
 lexTest [] lex = True
@@ -217,15 +214,15 @@ lexTest sub (L _ _ (TagSet ts)) = rc
     tt = map T.pack sub
     rc = all (\e -> Set.member e ts) tt
 
-isNoun :: [Join] -> Bool
-isNoun (a:_) = lexTest ["noun"] a
+isNoun :: Join -> Bool
+isNoun a = lexTest ["noun"] a
 
 
-isAdj:: [Join] -> Bool
-isAdj (a:_)= lexTest ["adjf"] a
+isAdj:: Join -> Bool
+isAdj a = lexTest ["adjf"] a
 
-adjNounConsist :: [Join] -> [Join] -> Bool
-adjNounConsist (adj:_) (noun:_) = sameDeclination adj noun
+adjNounConsist :: Join -> Join -> Bool
+adjNounConsist adj noun = sameDeclination adj noun
 
 
 nounCases :: Set.Set T.Text
@@ -250,7 +247,7 @@ getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 sameDeclination :: Join -> Join -> Bool
 sameDeclination a b = sa == sb
   where
-    as = [CASE,MULT]
+    as = [CASE, MULT]
     sa = getProp as a
     sb = getProp as b
 
