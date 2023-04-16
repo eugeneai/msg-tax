@@ -11,3 +11,6 @@ main = do
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
   US.uprint obj
+  US.uprint . NL.toText $ obj
+  putStrLn "\n\n"
+  US.uprint . NL.toNorm $ obj
