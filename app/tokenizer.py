@@ -69,16 +69,20 @@ def morphy(tok):
     s = str(tok)
     t = tok.tokentype
     p = morph.parse(s)
-    f = p[0]
-    ml = str(f.tag).split(",")
-    mln = []
-    for ttt in ml:
-        if " " in ttt:
-            mln.append([_.lower() for _ in ttt.split()])
-        else:
-            mln.append(ttt.lower())
-    d = {"norm": f.normal_form, "tag": mln}
-    return d
+    l = []
+    for f in p:
+        # print(f)
+        ml = str(f.tag).split(",")
+        mln = []
+        for ttt in ml:
+            if " " in ttt:
+                mln.append([_.lower() for _ in ttt.split()])
+            else:
+                mln.append(ttt.lower())
+        d = {"norm": f.normal_form, "tag": mln, "score": f.score}
+        l.append(d)
+    # print(l)
+    return l
 
 
 configfile = "tokconfig-rus"

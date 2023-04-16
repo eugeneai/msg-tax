@@ -81,13 +81,14 @@ instance Show TagSet where
 data Morph = Morph {
     norm:: T.Text
   , tag:: TagSet
+  , score:: Float
 --  , tag:: (Maybe MessageMorphTag)
   } deriving (Show, Generic)
 
 data Lex = Lex {
     w:: T.Text
   , ucto:: T.Text
-  , morph:: (Maybe Morph)
+  , morph:: Maybe [Morph]
   } deriving (Show, Generic)
 
 data Message = Message {
@@ -148,7 +149,9 @@ toNorm = convertMsg defNoParse c
   where
     c lex = case morph lex of
       Nothing -> w lex
-      Just m -> norm m
+      Just morphs -> T.pack "morphs" -- T.concatMap gonorm morphs
+    gonorm :: Morph -> T.Text
+    gonorm = norm
 
 convertMsg :: T.Text -> (Lex -> T.Text) -> Maybe Message -> T.Text
 convertMsg def _ Nothing = def
@@ -160,24 +163,24 @@ version = "0.0.1"
 data Connection = AdjNoun | SubjVerb | Next deriving Show
 
 --                                  ucto   norm   tagSet
-data Join = J Connection [Join] | L T.Text T.Text TagSet
+data Join = J Connection [Join] | L T.Text [Morph]
 
 instance Show Join where
   show (J conn xs) = "(" ++ show conn ++ " " ++ tail ++ ")"
     where
       tail = concatMap show $ xs
-  show (L u n ts) = "|" ++ (T.unpack u) ++ " " ++ (T.unpack n) ++
+  show (L u ts) = "|" ++ (T.unpack u) ++
     " " ++ show ts ++ "\n"
 
 toJoin :: Maybe Message -> Maybe Join
 toJoin Nothing = Nothing
 toJoin (Just msg) = Just . J Next . map lex . text $ msg
   where
-    lex l = L (ucto l) (mynorm l) (mytagset l)
-    mynorm ::Lex -> T.Text
-    mynorm l = maybe (w l) norm (morph l)
-    mytagset :: Lex -> TagSet
-    mytagset l = maybe (TagSet Set.empty) tag (morph l)
+    lex l = L (ucto l) (maybe [] id $ morph l)
+    -- mynorm ::Lex -> T.Text
+    -- mynorm l = maybe (w l) norm (morph l)
+    -- mytagset :: Lex -> TagSet
+    -- mytagset l = maybe (TagSet Set.empty) tag (morph l)
 
 
 class Rule r where
@@ -214,10 +217,10 @@ instance Rule Connection where
 
 lexTest :: [String] -> Join -> Bool
 lexTest [] _ = True
-lexTest sub (L _ _ (TagSet ts)) = rc
-  where
-    tt = map T.pack sub
-    rc = all (\e -> Set.member e ts) tt
+lexTest sub (L _ morphs) = False -- rc
+  -- where
+  --   tt = map T.pack sub
+  --   rc = all (\e -> Set.member e ts) tt
 lexTest sub (J _ []) = False
 lexTest sub (J _ (a:_)) = lexTest sub a
 
@@ -256,22 +259,25 @@ mult = Set.map T.pack $ Set.fromList ["sing", "plur"]
 
 data POSAttr = MULT | CASE | PRON
 
-getProp :: [POSAttr] -> Join -> Set.Set T.Text
-getProp [CASE] (L _ _ (TagSet ts)) = Set.filter f ts
+getProp :: [POSAttr] -> Morph -> Set.Set T.Text
+getProp [CASE] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e nounCases
-getProp [MULT] (L _ _ (TagSet ts)) = Set.filter f ts
+getProp [MULT] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e mult
-getProp [PRON] (L _ _ (TagSet ts)) = Set.filter f ts
+getProp [PRON] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e pronouns
 getProp [] _ = Set.empty:: Set.Set(T.Text)
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
+unTS :: TagSet -> Set.Set T.Text
+unTS (TagSet t) = t
+
 sameDeclination :: Join -> Join -> Bool
-sameDeclination a b = sa =*= sb
-  where
-    as = [CASE, MULT]
-    sa = getProp as a
-    sb = getProp as b
+sameDeclination a b = False -- sa =*= sb
+  -- where
+  --   as = [CASE, MULT]
+  --   sa = getProp as a
+  --   sb = getProp as b
 
 (=*=) :: Set.Set T.Text -> Set.Set T.Text -> Bool
 a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
