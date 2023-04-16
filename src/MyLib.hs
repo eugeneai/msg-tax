@@ -167,3 +167,21 @@ toJoin (Just msg) = Just . J Next . map lex . text $ msg
     mynorm l = maybe (w l) norm (morph l)
     mytagset :: Lex -> TagSet
     mytagset l = maybe (TagSet Set.empty) tag (morph l)
+
+
+class Rule r where
+  pass :: r -> Join -> Join -> Maybe Join
+
+joinPass :: (Rule r) => r -> Join -> Join
+joinPass r (J Next l) = J Next $ applyRule r l
+joinPass _ rest = rest
+
+applyRule :: (Rule r) => r -> [Join] -> [Join]
+applyRule _ [] = []
+applyRule _ [e] = [e]
+applyRule r (a:b:l) = rc
+  where
+    appl = pass r a b
+    rc = case appl of
+      Nothing -> a:(applyRule r (b:l))
+      Just j -> applyRule r (j:l)
