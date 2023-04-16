@@ -16,16 +16,16 @@ module MyLib (
              ) where
 
 import Prelude.Compat
-    ( print,
+    (
       Show,
-      Applicative((<*>)),
+      -- Applicative((<*>)),
       String,
-      Maybe,
-      IO,
-      (<$>),
-      ($),
-      putStrLn,
-      FilePath )
+      Maybe --,
+      -- IO,
+      --- (<$>),
+      -- ($),
+      -- FilePath
+    )
 import qualified Data.Text as T
 -- import qualified Control.Applicative as CA
 -- import qualified Data.Text.IO as TIO
@@ -91,4 +91,5 @@ translateContent content = do
   obj
 
 
+version :: String
 version = "0.0.1"
