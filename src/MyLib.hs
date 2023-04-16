@@ -32,8 +32,12 @@ import Prelude.Compat
     , map
     , concatMap
     , maybe
+    , show
+    , (++)
+    , otherwise
       -- FilePath
     )
+-- import BasePrelude (intercalate)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Text as T
@@ -56,7 +60,12 @@ data Subject = Subject {
 data MorphTag = Tag String | Tags [String]
   deriving (Show, Generic)
 
-newtype TagSet = TagSet (Set.Set T.Text) deriving Show
+newtype TagSet = TagSet (Set.Set T.Text)
+
+instance Show TagSet where
+  show (TagSet s)
+    | Set.null s = "*"
+    | otherwise = show . Set.toList $ s
 
 data Morph = Morph {
     norm:: T.Text
@@ -138,8 +147,16 @@ version :: String
 version = "0.0.1"
 
 data Connection = ToSubj | ToVerb | Next deriving Show
+
 --                                  ucto   norm   tagSet
-data Join = J Connection [Join] | L T.Text T.Text TagSet deriving Show
+data Join = J Connection [Join] | L T.Text T.Text TagSet
+
+instance Show Join where
+  show (J conn xs) = "(" ++ show conn ++ " " ++ tail ++ ")"
+    where
+      tail = concatMap show $ xs
+  show (L u n ts) = "|" ++ (T.unpack u) ++ " " ++ (T.unpack n) ++
+    " " ++ show ts ++ ""
 
 toJoin :: Maybe Message -> Maybe Join
 toJoin Nothing = Nothing
