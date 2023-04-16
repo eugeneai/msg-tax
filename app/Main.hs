@@ -17,6 +17,9 @@ main = do
   -- putStrLn "\n\n"
   -- US.uprint . NL.toNorm $ obj
   let tran = NL.toJoin obj
+--  let joinRule = NL.join NL.AdjNoun
   case tran of
     Nothing -> print "No parse"
-    Just a -> US.uprint tran
+    Just a -> do
+      let appl = NL.joinPass NL.AdjNoun a
+      US.uprint appl
