@@ -5,18 +5,17 @@
 {-# LANGUAGE InstanceSigs #-}
 
 module MyLib (
-  Subject,
-  MorphTag,
-  Morph,
-  Lex,
-  Message,
-  translateContent,
-  toText,
-  toNorm,
-  convertMsg,
---  translateFile,
-  version
-             ) where
+    Subject
+  , MorphTag
+  , Morph
+  , Lex
+  , Message
+  , translateContent
+  , toText
+  , toNorm
+  , convertMsg
+  , toJoin
+  , version) where
 
 import Prelude.Compat
     (
@@ -32,6 +31,7 @@ import Prelude.Compat
     , (.)
     , map
     , concatMap
+    , maybe
       -- FilePath
     )
 import qualified Data.Set as Set
@@ -130,11 +130,23 @@ toNorm = convertMsg defNoParse c
       Nothing -> w lex
       Just m -> norm m
 
--- Lex {w = "база", ucto = "word", morph = Just (Morph {norm = "база", tag = Just (Array [String "noun",String "inan",Array [String "femn",String "sing"],String "nomn"])})}
-
 convertMsg :: T.Text -> (Lex -> T.Text) -> Maybe Message -> T.Text
 convertMsg def _ Nothing = def
 convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 
 version :: String
 version = "0.0.1"
+
+data Connection = ToSubj | ToVerb | Next deriving Show
+--                                  ucto   norm   tagSet
+data Join = J Connection [Join] | L T.Text T.Text TagSet deriving Show
+
+toJoin :: Maybe Message -> Maybe Join
+toJoin Nothing = Nothing
+toJoin (Just msg) = Just . J Next . map lex . text $ msg
+  where
+    lex l = L (ucto l) (mynorm l) (mytagset l)
+    mynorm ::Lex -> T.Text
+    mynorm l = maybe (w l) norm (morph l)
+    mytagset :: Lex -> TagSet
+    mytagset l = maybe (TagSet Set.empty) tag (morph l)

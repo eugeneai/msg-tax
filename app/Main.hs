@@ -3,6 +3,7 @@ module Main (main) where
 import qualified MyLib as NL
 import qualified Text.Show.Unicode as US
 import qualified Data.ByteString.Lazy.Char8 as BL
+import Prelude.Compat (id)
 
 main :: IO ()
 main = do
@@ -11,6 +12,11 @@ main = do
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
   US.uprint obj
-  US.uprint . NL.toText $ obj
   putStrLn "\n\n"
-  US.uprint . NL.toNorm $ obj
+  -- US.uprint . NL.toText $ obj
+  -- putStrLn "\n\n"
+  -- US.uprint . NL.toNorm $ obj
+  let tran = NL.toJoin obj
+  case tran of
+    Nothing -> print "No parse"
+    Just a -> US.uprint tran
