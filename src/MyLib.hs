@@ -52,6 +52,7 @@ import Prelude.Compat
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import qualified Text.Read.Compat as TR
 import qualified Control.Applicative as CA
 -- import qualified Data.Text.IO as TIO
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -71,7 +72,7 @@ data Subject = Subject {
 data MorphTag = Tag String | Tags [String]
   deriving (Show, Generic)
 
-newtype TagSet = TagSet (Set.Set T.Text)
+newtype TagSet = TagSet (Set.Set GRAM)
 
 instance Show TagSet where
   show (TagSet s)
@@ -107,13 +108,21 @@ instance FromJSON TagSet where
 
   parseJSON (Array v) = CA.pure . TagSet $ myUnpack . V.toList $ v
     where
-
+      myUnpack :: [Value] -> Set.Set GRAM
       myUnpack values = Set.fromList $ concatMap val values
-      val :: Value -> [T.Text]
-      val (String s) = [s]
+      val :: Value -> [GRAM]
+      val (String s) = [readGram s]
       val (Array a) = concatMap val . V.toList $ a
-      val _ = ["IGN"]
+      val _ = [BAD]
   parseJSON _ = CA.empty
+
+readGram :: T.Text -> GRAM
+readGram t =
+  let rm = TR.readMaybe . T.unpack . T.toUpper $ t :: Maybe GRAM
+  in
+    case rm of
+      Nothing -> Unrec t
+      Just g -> g :: GRAM
 
 instance ToJSON Subject
 instance ToJSON Message
@@ -149,7 +158,9 @@ toNorm = convertMsg defNoParse c
   where
     c lex = case morph lex of
       Nothing -> w lex
-      Just morphs -> T.pack "morphs" -- T.concatMap gonorm morphs
+      Just morphs -> go morphs -- T.concatMap gonorm morphs
+    go :: [Morph] -> T.Text
+    go xs = T.intercalate "/" . map gonorm $ xs :: T.Text
     gonorm :: Morph -> T.Text
     gonorm = norm
 
@@ -200,9 +211,51 @@ applyRule r (a:b:l) = rc
       Nothing -> a:(applyRule r (b:l))
       Just j -> applyRule r (j:l)
 
-
-
-
+data GRAM = NOUN
+  | ADJF
+  | ADJS
+  | COMP
+  | VERB
+  | INFN
+  | PRTF
+  | PRTS
+  | GRND
+  | NUMR
+  | ADVB
+  | NPRO
+  | PRED
+  | PREP
+  | CONJ
+  | PRCL
+  | INTJ
+  | NOMN
+  | GENT
+  | DATV
+  | ACCS
+  | ABLT
+  | LOCT
+  | VOCT
+  | GEN2
+  | ACC2
+  | LOC2
+  | SING
+  | PLUR
+  | MASC
+  | FEMN
+  | NEUT
+  | LATN
+  | PNCT
+  | NUMB
+  | INTG
+  | REAL
+  | ROMN
+  | UNKN
+  | PER1
+  | PER2
+  | PER3
+  | BAD
+  | Unrec T.Text -- For all unknown
+  deriving (Show, Read, Ord, Eq)
 
 -- Simple Grammar rules
 
@@ -215,7 +268,7 @@ instance Rule Connection where
       Just (J SubjVerb [subj, verb])
   join _ _ _ = Nothing
 
-lexTest :: [String] -> Join -> Bool
+lexTest :: [GRAM] -> Join -> Bool
 lexTest [] _ = True
 lexTest sub (L _ morphs) = False -- rc
   -- where
@@ -226,7 +279,7 @@ lexTest sub (J _ (a:_)) = lexTest sub a
 
 
 isVerb :: Join -> Bool
-isVerb = lexTest ["verb"]
+isVerb = lexTest [VERB]
 
 isSubj :: Join -> Bool
 isSubj v = isNounNomn v || isPronoun v
@@ -235,41 +288,42 @@ isNounNomn :: Join -> Bool
 isNounNomn n = isNoun n && isNomn n
 
 isNomn :: Join -> Bool
-isNomn n = lexTest ["nomn"] n
+isNomn n = lexTest [NOMN] n
 
 isNoun :: Join -> Bool
-isNoun a = lexTest ["noun"] a
+isNoun a = lexTest [NOUN] a
 
 
 isAdj:: Join -> Bool
-isAdj a = lexTest ["adjf"] a
+isAdj a = lexTest [ADJF] a
 
 adjNounConsist :: Join -> Join -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
 
 
-nounCases :: Set.Set T.Text
-nounCases = Set.map T.pack $ Set.fromList ["nomn", "gent", "datv",
-                          "accs", "ablt", "loct",
-                          "voct", "gen2", "acc2",
-                          "loc2"]
+nounCases :: Set.Set GRAM
+nounCases = Set.fromList
+            [NOMN, GENT, DATV,
+              ACCS, ABLT, LOCT,
+              VOCT, GEN2, ACC2,
+              LOC2]
 
-mult :: Set.Set T.Text
-mult = Set.map T.pack $ Set.fromList ["sing", "plur"]
+mult :: Set.Set GRAM
+mult = Set.fromList [SING, PLUR]
 
 data POSAttr = MULT | CASE | PRON
 
-getProp :: [POSAttr] -> Morph -> Set.Set T.Text
+getProp :: [POSAttr] -> Morph -> Set.Set GRAM
 getProp [CASE] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e nounCases
 getProp [MULT] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e mult
 getProp [PRON] m = Set.filter f $ unTS . tag $ m
   where f e = Set.member e pronouns
-getProp [] _ = Set.empty:: Set.Set(T.Text)
+getProp [] _ = Set.empty:: Set.Set GRAM
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
-unTS :: TagSet -> Set.Set T.Text
+unTS :: TagSet -> Set.Set GRAM
 unTS (TagSet t) = t
 
 sameDeclination :: Join -> Join -> Bool
@@ -282,12 +336,13 @@ sameDeclination a b = False -- sa =*= sb
 (=*=) :: Set.Set T.Text -> Set.Set T.Text -> Bool
 a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 
-pronouns = Set.map T.pack $ Set.fromList ["1per", "2per", "3per"]
+pronouns :: Set.Set GRAM
+pronouns = Set.fromList [PER1, PER1, PER3]
 
 isPronoun :: Join -> Bool
 isPronoun p = any f $ Set.toList pronouns
   where
-    f pr = lexTest [T.unpack pr] p
+    f pr = lexTest [pr] p
 
 subjVerbConsist :: Join -> Join -> Bool
 subjVerbConsist pr verb = cpr && cverb

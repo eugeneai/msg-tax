@@ -12,11 +12,11 @@ main = do
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
   US.uprint obj
---   putStrLn "\n\n"
---   US.uprint . NL.toText $ obj
---   putStrLn "\n\n"
---   US.uprint . NL.toNorm $ obj
---   putStrLn "\n-------------\n"
+  putStrLn "\n\n"
+  US.uprint . NL.toText $ obj
+  putStrLn "\n\n"
+  US.uprint . NL.toNorm $ obj
+  putStrLn "\n-------------\n"
 --   let tran = NL.toJoin obj
 -- --  let joinRule = NL.join NL.AdjNoun
 --   case tran of
