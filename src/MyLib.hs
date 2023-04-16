@@ -16,7 +16,7 @@ module MyLib (
   , convertMsg
   , toJoin
   , joinPass
-  , Connection (AdjNoun)
+  , Connection (AdjNoun, SubjVerb)
   , join
   , text
   , version) where
@@ -43,6 +43,7 @@ import Prelude.Compat
     , Bool (False)
     , Bool (True)
     , all
+    , any
     , (&&)
     , (||)
       -- FilePath
@@ -156,7 +157,7 @@ convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 version :: String
 version = "0.0.1"
 
-data Connection = AdjNoun | NounVreb | Next deriving Show
+data Connection = AdjNoun | SubjVerb | Next deriving Show
 
 --                                  ucto   norm   tagSet
 data Join = J Connection [Join] | L T.Text T.Text TagSet
@@ -205,14 +206,33 @@ applyRule r (a:b:l) = rc
 instance Rule Connection where
   join AdjNoun adj noun
     | isAdj adj && isNoun noun && adjNounConsist adj noun = Just (J AdjNoun [adj, noun])
-  join AdjNoun a b = Nothing
+  -- join AdjNoun a b = Nothing
+  join SubjVerb subj verb
+    | isSubj subj && isVerb verb && subjVerbConsist subj verb =
+      Just (J SubjVerb [subj, verb])
   join _ _ _ = Nothing
 
-lexTest [] lex = True
+lexTest :: [String] -> Join -> Bool
+lexTest [] _ = True
 lexTest sub (L _ _ (TagSet ts)) = rc
   where
     tt = map T.pack sub
     rc = all (\e -> Set.member e ts) tt
+lexTest sub (J _ []) = False
+lexTest sub (J _ (a:_)) = lexTest sub a
+
+
+isVerb :: Join -> Bool
+isVerb = lexTest ["verb"]
+
+isSubj :: Join -> Bool
+isSubj v = isNounNomn v || isPronoun v
+
+isNounNomn :: Join -> Bool
+isNounNomn n = isNoun n && isNomn n
+
+isNomn :: Join -> Bool
+isNomn n = lexTest ["nomn"] n
 
 isNoun :: Join -> Bool
 isNoun a = lexTest ["noun"] a
@@ -234,13 +254,15 @@ nounCases = Set.map T.pack $ Set.fromList ["nomn", "gent", "datv",
 mult :: Set.Set T.Text
 mult = Set.map T.pack $ Set.fromList ["sing", "plur"]
 
-data POSAttr = MULT | CASE
+data POSAttr = MULT | CASE | PRON
 
 getProp :: [POSAttr] -> Join -> Set.Set T.Text
 getProp [CASE] (L _ _ (TagSet ts)) = Set.filter f ts
   where f e = Set.member e nounCases
 getProp [MULT] (L _ _ (TagSet ts)) = Set.filter f ts
   where f e = Set.member e mult
+getProp [PRON] (L _ _ (TagSet ts)) = Set.filter f ts
+  where f e = Set.member e pronouns
 getProp [] _ = Set.empty:: Set.Set(T.Text)
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
@@ -253,3 +275,17 @@ sameDeclination a b = sa == sb
 
 (==) :: Set.Set T.Text -> Set.Set T.Text -> Bool
 a == b = Set.isSubsetOf a b && Set.isSubsetOf b a
+
+pronouns = Set.map T.pack $ Set.fromList ["1per", "2per", "3per"]
+
+isPronoun :: Join -> Bool
+isPronoun p = any f $ Set.toList pronouns
+  where
+    f pr = lexTest [T.unpack pr] p
+
+subjVerbConsist :: Join -> Join -> Bool
+subjVerbConsist pr verb = cpr && cverb
+  where
+    pra = [PRON, MULT]
+    cpr = True
+    cverb = True
