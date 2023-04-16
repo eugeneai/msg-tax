@@ -22,32 +22,32 @@ module MyLib (
   , version) where
 
 import Prelude.Compat
-    (
-      Show
-      -- Applicative((<*>)),
-    , String
-    , Maybe
-    , Maybe (Nothing)
-    , Maybe (Just)
-      -- IO,
-      --- (<$>),
-    , ($)
-    , (.)
-    , map
-    , concatMap
-    , maybe
-    , show
-    , (++)
-    , otherwise
-    , Bool
-    , Bool (False)
-    , Bool (True)
-    , all
-    , any
-    , (&&)
-    , (||)
-      -- FilePath
-    )
+    -- (
+    --   Show
+    --   -- Applicative((<*>)),
+    -- , String
+    -- , Maybe
+    -- , Maybe (Nothing)
+    -- , Maybe (Just)
+    --   -- IO,
+    --   --- (<$>),
+    -- , ($)
+    -- , (.)
+    -- , map
+    -- , concatMap
+    -- , maybe
+    -- , show
+    -- , (++)
+    -- , otherwise
+    -- , Bool
+    -- , Bool (False)
+    -- , Bool (True)
+    -- , all
+    -- , any
+    -- , (&&)
+    -- , (||)
+    --   -- FilePath
+    -- )
 -- import BasePrelude (intercalate)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
@@ -267,14 +267,14 @@ getProp [] _ = Set.empty:: Set.Set(T.Text)
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
 sameDeclination :: Join -> Join -> Bool
-sameDeclination a b = sa == sb
+sameDeclination a b = sa =*= sb
   where
     as = [CASE, MULT]
     sa = getProp as a
     sb = getProp as b
 
-(==) :: Set.Set T.Text -> Set.Set T.Text -> Bool
-a == b = Set.isSubsetOf a b && Set.isSubsetOf b a
+(=*=) :: Set.Set T.Text -> Set.Set T.Text -> Bool
+a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 
 pronouns = Set.map T.pack $ Set.fromList ["1per", "2per", "3per"]
 
