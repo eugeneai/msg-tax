@@ -11,8 +11,8 @@ main = do
   js <- BL.getContents
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
-  US.uprint obj
-  putStrLn "\n\n"
+--  US.uprint obj
+--  putStrLn "\n\n"
   US.uprint . NL.toText $ obj
   putStrLn "\n\n"
   US.uprint . NL.toNorm $ obj
@@ -23,5 +23,6 @@ main = do
     Nothing -> print "No parse"
     Just appl -> do
       let appl1 = NL.joinPass NL.AdjNoun appl
-      US.uprint appl1
---       let appl2 = NL.joinPass NL.SubjVerb appl
+      let appl2 = NL.joinPass NL.SubjVerb appl
+      let appl3 = NL.joinPass NL.NounNounGent appl
+      US.uprint appl3

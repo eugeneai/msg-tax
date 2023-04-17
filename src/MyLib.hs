@@ -16,7 +16,7 @@ module MyLib (
   , convertMsg
   , toJoin
   , joinPass
-  , Connection (AdjNoun, SubjVerb)
+  , Connection (AdjNoun, SubjVerb, NounNounGent)
   , join
   , text
   , version) where
@@ -176,7 +176,8 @@ convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 version :: String
 version = "0.0.1"
 
-data Connection = AdjNoun | SubjVerb | Next deriving Show
+data Connection = AdjNoun | SubjVerb | NounNounGent
+  deriving Show
 
 data Join = R [Join] | J Connection (Morph, Morph) (Join, Join) | L T.Text [Morph]
 
@@ -186,7 +187,8 @@ instance Show Join where
       tail = show a ++ " " ++ show b
   show (R ts) = "(R " ++ (concatMap show $ ts) ++ ")"
   show (L u ts) = "|" ++ (T.unpack u) ++
-    " " ++ show ts ++ "\n"
+    "\n"
+--    " " ++ show ts ++ "\n"
 
 toJoin :: Maybe Message -> Maybe Join
 toJoin Nothing = Nothing
@@ -200,21 +202,22 @@ toJoin (Just msg) = Just . R . map lex . text $ msg
 
 
 class Rule r where
-  join :: r -> Join -> Join -> Maybe Join
+  join :: r -> (Morph->Morph->Bool, Morph->Bool, Morph->Bool)
 
-joinPass :: (Rule r) => r -> Join -> Join
+joinPass :: Connection -> Join -> Join
 joinPass r (R l) = R $ applyRule r l
-joinPass r rest = rest
+joinPass _ rest = rest
 
-applyRule :: (Rule r) => r -> [Join] -> [Join]
+applyRule :: Connection -> [Join] -> [Join]
 applyRule _ [] = []
 applyRule _ [e] = [e]
 applyRule r (a:b:l) = rc
   where
-    appl = join r a b
-    rc = case appl of
-      Nothing -> a:(applyRule r (b:l))
-      Just j -> applyRule r (j:l)
+    (mjoin, left, right) = join r
+    lm = [ (ma, mb) | (ma, mb) <- compPairs (left, right) a b, mjoin ma mb ]
+    nj = J r (head lm) (a, b)
+    rc = if null lm then a:(applyRule r (b:l))
+         else applyRule r (nj:l)
 
 data GRAM = BAD
   | POST  | NOUN  | ADJF  | ADJS  | COMP  | VERB  | INFN  | PRTF  | PRTS
@@ -235,27 +238,24 @@ data GRAM = BAD
 -- Simple Grammar rules
 
 instance Rule Connection where
-  join :: Connection -> Join -> Join -> Maybe Join
-  join AdjNoun adj noun =
-    let l = [ (a, n) | (a, n) <- compPairs adj noun,
-              isAdj a && isNoun n && adjNounConsist a n ]
-    in case l of
-      [] -> Nothing
-      ll -> Just (J AdjNoun (head ll) (adj, noun))
-
-  -- join AdjNoun a b = Nothing
-  -- join SubjVerb subj verb
-  --   | isSubj subj && isVerb verb && subjVerbConsist subj verb =
-  --     Just (J SubjVerb [subj, verb])
-  join _ _ _ = Nothing
+  join :: Connection -> (Morph -> Morph -> Bool, Morph -> Bool, Morph -> Bool)
+  join AdjNoun = (adjNounConsist, isAdj, isNoun)
+  join SubjVerb = (subjVerbConsist, isSubj, isVerb)
+  join NounNounGent = (isAnyRel, isNoun, isNounGent)
+  join _ = (lfm, lf, lf)
+    where
+      lf _ = False
+      lfm _ _ = False
 
 minimumScore :: Float
 minimumScore = 0.01
 
-compPairs :: Join -> Join -> [(Morph, Morph)]
-compPairs a b = rc
+compPairs :: (Morph->Bool, Morph->Bool) -> Join -> Join -> [(Morph, Morph)]
+compPairs (left, right) a b = rc
   where
-    rc = L.map g . L.sortBy f $ ([ (calcS aa bb, aa, bb) | aa <- getParJ a, bb <- getParJ b,
+    rc = L.map g . L.sortBy f $ ([ (calcS aa bb, aa, bb) |
+                                   aa <- getParJ a, left aa,
+                                   bb <- getParJ b, right bb,
                                   calcS aa bb > minimumScore])
     g (_, b', c') = (b',c')
     f :: (Float, Morph, Morph) -> (Float, Morph, Morph) -> Ordering
@@ -284,15 +284,21 @@ isSubj v = isNounNomn v || isPronoun v
 isNounNomn :: Morph -> Bool
 isNounNomn n = isNoun n && isNomn n
 
+isNounGent :: Morph -> Bool
+isNounGent n = isNoun n && isGent n
+
 isNomn :: Morph -> Bool
-isNomn n = lexTest [NOMN] n
+isNomn = lexTest [NOMN]
+
+isGent :: Morph -> Bool
+isGent = lexTest [GENT]
 
 isNoun :: Morph -> Bool
-isNoun a = lexTest [NOUN] a
+isNoun = lexTest [NOUN]
 
 
 isAdj:: Morph -> Bool
-isAdj a = lexTest [ADJF] a
+isAdj = lexTest [ADJF]
 
 adjNounConsist :: Morph -> Morph -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
@@ -342,8 +348,17 @@ isPronoun p = any f $ Set.toList pronouns
     f pr = lexTest [pr] p
 
 subjVerbConsist :: Morph -> Morph -> Bool
-subjVerbConsist pr verb = cpr && cverb
+subjVerbConsist subj verb = pronVerb || nounVerb
   where
     pra = [PPRON, PMULT]
-    cpr = True
-    cverb = True
+    va1 = [PPRON, PMULT]
+    va2 = [PMULT]
+    na = [PMULT]
+    ppr = getProp pra subj
+    vpr1 = getProp va1 verb
+    vpr2 = getProp va2 verb
+    npr = getProp na subj
+    pronVerb = ppr =*= vpr1
+    nounVerb = npr =*= vpr2
+
+isAnyRel _ _ = True
