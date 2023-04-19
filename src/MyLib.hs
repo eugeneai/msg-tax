@@ -201,10 +201,16 @@ toJoin :: Maybe Message -> Maybe [[Join]]
 toJoin Nothing = Nothing
 toJoin (Just msg) = Just . map lext . text $ msg
   where
-    lext l = [ P gram (w l) (conv gram m) |
-               gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
-               m <- (morphs l),
-               lexTest [gram] m]
+    lext lex =
+      let rc = go lex
+      in if L.null rc then [P UNKN (w lex) (Morph (w lex) (TagSet Set.empty) 1.0)]
+         else rc
+
+    go l = [ P gram (w l) (conv gram m) |
+             gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
+             m <- (morphs l),
+             lexTest [gram] m]
+
     conv gram m =
       let (Morph w (TagSet ts) score) = m
       in (Morph w (TagSet (Set.delete gram ts)) score)
