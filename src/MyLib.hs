@@ -261,21 +261,25 @@ instance Rule Connection where
 minimumScore :: Float
 minimumScore = 0.01
 
+data RelSide = LeftSide | RightSide
+  deriving (Show, Eq)
+
 compPairs :: (Morph->Bool, Morph->Bool) -> Join -> Join -> [(Morph, Morph)]
 compPairs (left, right) a b = rc
   where
     rc = L.map g . L.sortBy f $ ([ (calcS aa bb, aa, bb) |
-                                   aa <- getParJ a, left aa,
-                                   bb <- getParJ b, right bb,
+                                   aa <- getParJ LeftSide a, left aa,
+                                   bb <- getParJ RightSide b, right bb,
                                   calcS aa bb > minimumScore])
     g (_, b', c') = (b',c')
     f :: (Float, Morph, Morph) -> (Float, Morph, Morph) -> Ordering
     f (a', _, _) (b', _, _) = compare a' b'
-    getParJ (R l) = getParL l
-    getParJ (J _ aj bj) = getParJ aj ++ getParJ bj
-    getParJ (M _ _ morphs) = morphs
-    getParL [] = []
-    getParL (p:_) = getParJ p
+    getParJ s (R l) = getParL s l
+    getParJ LeftSide (J _ aj bj) = getParJ LeftSide aj
+    getParJ RightSide (J _ aj bj) = getParJ RightSide bj
+    getParJ _ (M _ _ morphs) = morphs
+    getParL _ [] = []
+    getParL s (p:_) = getParJ s p
 
     calcS :: Morph -> Morph -> Float
     calcS a1 b1 = (score a1) * (score b1)
