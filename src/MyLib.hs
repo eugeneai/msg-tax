@@ -15,7 +15,7 @@ module MyLib (
   , convertMsg
   , toJoin
   , joinPass
-  , Connection (AdjNoun, SubjVerb, NounNounGent)
+  , GRAM (AdjNoun, SubjVerb, NounNounGent)
   , join
   , text
   , version) where
@@ -179,9 +179,6 @@ convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 version :: String
 version = "0.0.1"
 
-data Connection = AdjNoun | SubjVerb | NounNounGent
-  deriving (Show, Eq, Read)
-
 data Ucto = URL | URL_WWW | URL_DOMAIN
   | E_MAIL | ABBREVIATION_KNOWN | WORD_PARPREFIX
   | WORD_PARSUFFIX | WORD_COMPOUND
@@ -191,44 +188,54 @@ data Ucto = URL | URL_WWW | URL_DOMAIN
   | CURRENCY | WORD | PUNCTUATION | UNKNOWN
   deriving (Show, Eq, Read)
 
-data Join = R [Join] | J Connection Join Join | M Ucto T.Text [Morph]
+data Join = J GRAM Join Join Float
+          | P GRAM T.Text Morph
 
 instance Show Join where
-  show (J c a b) = "(J " ++ show c ++ " " ++ tails ++ ")\n"
+  show (J c a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
     where
       tails = show a ++ " " ++ show b
-  show (R ts) = "(R " ++ (concatMap show $ ts) ++ ")"
-  show (M u w ts) = "|" ++ show u ++ " " ++ show w ++ " [ " ++ show ts ++ "]\n"
+  show (P u w ts) = "<" ++ show u ++ "> " ++ show w ++ " / " ++ show ts ++ "\n"
 
-toJoin :: Maybe Message -> Maybe Join
+toJoin :: Maybe Message -> Maybe [[Join]]
 toJoin Nothing = Nothing
-toJoin (Just msg) = Just . R . map lext . text $ msg
+toJoin (Just msg) = Just . map lext . text $ msg
   where
-    lext l = M (ucto l) (w l) (maybe [] id $ morph l)
+    lext l = [ P gram (w l) (conv gram m) |
+               gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
+               m <- (morphs l),
+               lexTest [gram] m]
+    conv gram m =
+      let (Morph w (TagSet ts) score) = m
+      in (Morph w (TagSet (Set.delete gram ts)) score)
+    morphs l = case morph l of
+               Nothing -> []
+               Just m -> m
 
 class Rule r where
-  join :: r -> (Morph->Morph->Bool, Morph->Bool, Morph->Bool)
+  join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool)
 
-joinPass :: Connection -> Join -> Join
-joinPass r (R l) = R $ applyRule r l
-joinPass _ rest = rest
+joinPass :: GRAM -> [[Join]] -> [[Join]]
+joinPass r l = applyRule r l
 
-applyRule :: Connection -> [Join] -> [Join]
+applyRule :: GRAM -> [[Join]] -> [[Join]]
 applyRule _ [] = []
 applyRule _ [e] = [e]
-applyRule r (a:b:l) = rc
+applyRule r (as:bs:l) = rc
   where
     (mjoin, left, right) = join r
-    lm = [ (ma, mb) | (ma, mb) <- compPairs (left, right) a b, mjoin ma mb ]
-    morphs = head lm
-    nj = red (a, b) morphs
-    rc = if null lm then a:(applyRule r (b:l))
+    lm = [ (score, ma, mb) |
+           (score, ma, mb) <- compPairs (left, right) as bs,
+           mjoin ma mb ] :: [(Float, Join, Join)]
+
+--    f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
+--    f (a', _, _) (b', _, _) = compare a' b'
+
+    nj = map red lm
+    rc = if null lm then as:(applyRule r (bs:l))
          else applyRule r (nj:l)
-    red :: (Join, Join) -> (Morph, Morph) -> Join
-    red (M u w _, M u' w' _) (ma, mb)  = J r (M u w [ma]) (M u' w' [mb])
-    red (M u w _, J c a b)   (ma, _)   = J r (M u w [ma]) (J c a b)
-    red (J c a b, M u w _)   (_,  mb)  = J r (J c a b)    (M u w [mb])
-    red (a,       b)         (_,  _)   = J r a b
+    red :: (Float, Join, Join) -> Join
+    red (s, a, b) = J r a b s
 
 data GRAM = BAD
   | POST  | NOUN  | ADJF  | ADJS  | COMP  | VERB  | INFN  | PRTF  | PRTS
@@ -244,6 +251,7 @@ data GRAM = BAD
   | V_IE  | V_BI  | FIMP  | PRDX  | COUN  | COLL  | V_SH  | AF_P  | INMX  | VPRE
   | ANPH  | INIT  | ADJX  | HYPO  | LATN  | UNKN
   | Unrec T.Text -- For all unknown
+  | AdjNoun | SubjVerb | NounNounGent
   deriving (Show, Read, Ord, Eq)
 
 
@@ -273,15 +281,14 @@ grams = M.fromList [
 
 -- Simple Grammar rules
 
-instance Rule Connection where
-  join :: Connection -> (Morph -> Morph -> Bool, Morph -> Bool, Morph -> Bool)
+instance Rule GRAM where
+  join :: GRAM -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool)
   join AdjNoun = (adjNounConsist, isAdj, isNoun)
   join SubjVerb = (subjVerbConsist, isSubj, isVerb)
   join NounNounGent = (isAnyRel, isNoun, isNounGent)
-  -- join _ = (lfm, lf, lf)
-  --   where
-  --     lf _ = False
-  --     lfm _ _ = False
+  join _ = (lfm, lf, lf)
+    where lf _ = False
+          lfm _ _ = False
 
 minimumScore :: Float
 minimumScore = 0.01
@@ -289,25 +296,31 @@ minimumScore = 0.01
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
 
-compPairs :: (Morph->Bool, Morph->Bool) -> Join -> Join -> [(Morph, Morph)]
-compPairs (left, right) a b = rc
+compPairs :: (Join->Bool, Join->Bool) -> [Join] -> [Join] -> [(Float, Join, Join)]
+compPairs (left, right) as bs = rc
   where
-    rc = L.map g . L.sortBy f $ ([ (calcS aa bb, aa, bb) |
-                                   aa <- getParJ LeftSide a, left aa,
-                                   bb <- getParJ RightSide b, right bb,
-                                  calcS aa bb > minimumScore])
+    rc = L.sortBy f $ [ (calcS aa' bb', aa', bb') |
+                        aa <- as,
+                        aa' <- [getParJ LeftSide aa],
+                        left aa',
+                        bb <- bs,
+                        bb' <- [getParJ RightSide bb],
+                        right bb',
+                        calcS aa' bb' > minimumScore]
     g (_, b', c') = (b',c')
-    f :: (Float, Morph, Morph) -> (Float, Morph, Morph) -> Ordering
-    f (a', _, _) (b', _, _) = compare a' b'
-    getParJ s (R l) = getParL s l
-    getParJ LeftSide (J _ aj bj) = getParJ LeftSide aj
-    getParJ RightSide (J _ aj bj) = getParJ RightSide bj
-    getParJ _ (M _ _ morphs) = morphs
-    getParL _ [] = []
-    getParL s (p:_) = getParJ s p
 
-    calcS :: Morph -> Morph -> Float
-    calcS a1 b1 = (score a1) * (score b1)
+    f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
+    f (a', _, _) (b', _, _) = compare b' a' -- descending
+
+    getParJ :: RelSide -> Join -> Join
+    getParJ LeftSide (J _ aj _ _) = getParJ LeftSide aj
+    getParJ RightSide (J _ _ bj _) = getParJ RightSide bj
+    getParJ _ pos = pos
+
+    calcS :: Join -> Join -> Float
+    calcS j1 j2 = (sco j1) * (sco j2)
+    sco (P _ _ a1) = score a1
+    sco (J _ a1 b1 s) = s -- (calcS a1 b1)
 
 lexTest :: [GRAM] -> Morph -> Bool
 lexTest [] _ = True
@@ -316,32 +329,36 @@ lexTest sub morph = rc
     TagSet ts = tag morph
     rc = all (\e -> Set.member e ts) sub
 
-isVerb :: Morph -> Bool
-isVerb = lexTest [VERB]
+isVerb :: Join -> Bool
+isVerb (P VERB _ _) = True
+isVerb _ = False
 
-isSubj :: Morph -> Bool
+isSubj :: Join -> Bool
 isSubj v = isNounNomn v || isPronoun v
 
-isNounNomn :: Morph -> Bool
+isNounNomn :: Join -> Bool
 isNounNomn n = isNoun n && isNomn n
 
-isNounGent :: Morph -> Bool
+isNounGent :: Join -> Bool
 isNounGent n = isNoun n && isGent n
 
-isNomn :: Morph -> Bool
-isNomn = lexTest [NOMN]
+isNomn :: Join -> Bool
+isNomn (P pos _ m) = lexTest [NOMN] m
+isNomn _ = False
 
-isGent :: Morph -> Bool
-isGent = lexTest [GENT]
+isGent :: Join -> Bool
+isGent (P pos _ m) = lexTest [GENT] m
+isGent _ = False
 
-isNoun :: Morph -> Bool
-isNoun = lexTest [NOUN]
+isNoun :: Join -> Bool
+isNoun (P NOUN  _ _) = True
+isNoun _ = False
 
+isAdj:: Join -> Bool
+isAdj (P ADJF _ _) = True
+isAdj _ = False
 
-isAdj:: Morph -> Bool
-isAdj = lexTest [ADJF]
-
-adjNounConsist :: Morph -> Morph -> Bool
+adjNounConsist :: Join -> Join -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
 
 getProp :: [GRAM] -> Morph -> Set.Set GRAM
@@ -360,8 +377,8 @@ getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 unTS :: TagSet -> Set.Set GRAM
 unTS (TagSet t) = t
 
-sameDeclination :: Morph -> Morph -> Bool
-sameDeclination a b = sa =*= sb
+sameDeclination :: Join -> Join -> Bool
+sameDeclination (P _ _ a) (P _ _ b) = sa =*= sb
   where
     as = [CASE, NMBR]
     sa = getProp as a
@@ -373,30 +390,28 @@ a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 pronouns :: Set.Set GRAM
 pronouns = Set.fromList [PER1, PER2, PER3]
 
-isPronoun :: Morph -> Bool
-isPronoun p = any f $ Set.toList pronouns
-  where
-    f pr = lexTest [pr] p
+isPronoun :: Join -> Bool
+isPronoun (P pr _ _) = Set.member pr pronouns
+isPronoun _ = False
 
-subjVerbConsist :: Morph -> Morph -> Bool
-subjVerbConsist subj verb = pronVerb || nounVerb
+subjVerbConsist :: Join -> Join -> Bool
+subjVerbConsist (P subj wsubj msubj) (P VERB verb mverb)
+  | isPronoun (P subj wsubj msubj) = consistency
+  | subj == NOUN = consistency
+  | otherwise = False
   where
-    pra = [PERS, NMBR]
-    va1 = [PERS, NMBR]
-    va2 = [NMBR]
-    na = [NMBR]
-    ppr = getProp pra subj
-    vpr1 = getProp va1 verb
-    vpr2 = getProp va2 verb
-    npr = getProp na subj
-    pronVerb = ppr =*= vpr1
-    nounVerb = npr =*= vpr2
+    pna = [NMBR]
+    vpr = getProp pna mverb
+    npr = getProp pna msubj
+    consistency = npr =*= vpr
 
 
 -- Use it for checking non working relations
 
-isAnyRel :: Morph -> Morph -> Bool
+isAnyRel :: Join -> Join -> Bool
 isAnyRel _ _ = True
 
-isAny :: Morph -> Bool
+isAny :: Join -> Bool
 isAny _ = True
+
+isGram gram = lexTest [gram]
