@@ -50,6 +50,7 @@ import Prelude.Compat
 -- import BasePrelude (intercalate)
 import qualified Data.List as L
 import qualified Data.Set as Set
+import qualified Data.Map.Lazy as M
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Text.Read.Compat as TR
@@ -237,14 +238,38 @@ data GRAM = BAD
   | GEN1  | GEN2  | ACC2  | LOC1  | LOC2  | ABBR  | NAME  | SURN  | PATR  | GEOX
   | ORGN  | TRAD  | SUBX  | SUPR  | QUAL  | APRO  | ANUM  | POSS  | V_EY  | V_OY
   | CMP2  | V_EJ  | ASPC  | PERF  | IMPF  | TRNS  | TRAN  | INTR  | IMPE  | IMPX
-  | MULT  | REFL  | PERS  | PER1  | PE22  | PER3  | TENS  | PRES  | PAST  | FUTR
+  | MULT  | REFL  | PERS  | PER1  | PER2  | PER3  | TENS  | PRES  | PAST  | FUTR
   | MOOD  | INDC  | IMPR  | INVL  | INCL  | EXCL  | VOIC  | ACTV  | PSSV  | INFR
   | SLNG  | ARCH  | LITR  | ERRO  | DIST  | QUES  | DMNS  | PRNT  | V_BE  | V_EN
   | V_IE  | V_BI  | FIMP  | PRDX  | COUN  | COLL  | V_SH  | AF_P  | INMX  | VPRE
   | ANPH  | INIT  | ADJX  | HYPO  | LATN  | UNKN
-  | PRONOUN
   | Unrec T.Text -- For all unknown
   deriving (Show, Read, Ord, Eq)
+
+
+grams :: M.Map GRAM (Set.Set GRAM)
+grams = M.fromList [
+    (POST, Set.fromList [NOUN, ADJF, ADJS, COMP, VERB, INFN,
+                         PRTF, PRTS, GRND, NUMR, ADVB, NPRO,
+                         PRED, PREP, CONJ, PRCL, INTJ])
+  , (ANIM, Set.fromList [ANIM, INAN])
+  , (MS_F, Set.fromList [MASC, FEMN])
+  , (GNDR, Set.fromList [NEUT, MS_F])
+  , (NMBR, Set.fromList [SING, PLUR])
+  , (CASE, Set.fromList [NOMN, GENT, DATV, ACCS, ABLT,
+                         LOCT, VOCT, GEN2, ACC2, LOC2])
+  , (GENT, Set.fromList [GEN1, GEN2])
+  , (ACCS, Set.fromList [ACC2])
+  , (LOCT, Set.fromList [LOC1, LOC2])
+  , (ASPC, Set.fromList [PERF, IMPF])
+  , (TRNS, Set.fromList [TRAN, INTR])
+  , (PERS, Set.fromList [PER1, PER2, PER3])
+  , (TENS, Set.fromList [PRES, PAST, FUTR])
+  , (MOOD, Set.fromList [INDC, IMPR])
+  , (INVL, Set.fromList [INCL, EXCL])
+  , (VOIC, Set.fromList [ACTV, PSSV])]
+
+
 
 -- Simple Grammar rules
 
@@ -319,24 +344,16 @@ isAdj = lexTest [ADJF]
 adjNounConsist :: Morph -> Morph -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
 
-
-nounCases :: Set.Set GRAM
-nounCases = Set.fromList
-            [NOMN, GENT, DATV,
-              ACCS, ABLT, LOCT,
-              VOCT, GEN2, ACC2,
-              LOC2]
-
-mult :: Set.Set GRAM
-mult = Set.fromList [SING, PLUR]
-
 getProp :: [GRAM] -> Morph -> Set.Set GRAM
-getProp [CASE] m = Set.filter f $ unTS . tag $ m
-  where f e = Set.member e nounCases
-getProp [MULT] m = Set.filter f $ unTS . tag $ m
-  where f e = Set.member e mult
-getProp [PRONOUN] m = Set.filter f $ unTS . tag $ m
-  where f e = Set.member e pronouns
+getProp [cls] m =
+  case set of
+    Nothing -> Set.empty
+    Just s ->
+      let f e = Set.member e s
+      in Set.filter f $ unTS . tag $ m
+  where
+    set = M.lookup cls grams
+
 getProp [] _ = Set.empty:: Set.Set GRAM
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
@@ -346,7 +363,7 @@ unTS (TagSet t) = t
 sameDeclination :: Morph -> Morph -> Bool
 sameDeclination a b = sa =*= sb
   where
-    as = [CASE, MULT]
+    as = [CASE, NMBR]
     sa = getProp as a
     sb = getProp as b
 
@@ -354,7 +371,7 @@ sameDeclination a b = sa =*= sb
 a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 
 pronouns :: Set.Set GRAM
-pronouns = Set.fromList [PER1, PER1, PER3]
+pronouns = Set.fromList [PER1, PER2, PER3]
 
 isPronoun :: Morph -> Bool
 isPronoun p = any f $ Set.toList pronouns
@@ -364,10 +381,10 @@ isPronoun p = any f $ Set.toList pronouns
 subjVerbConsist :: Morph -> Morph -> Bool
 subjVerbConsist subj verb = pronVerb || nounVerb
   where
-    pra = [PRONOUN, MULT]
-    va1 = [PRONOUN, MULT]
-    va2 = [MULT]
-    na = [MULT]
+    pra = [PERS, NMBR]
+    va1 = [PERS, NMBR]
+    va2 = [NMBR]
+    na = [NMBR]
     ppr = getProp pra subj
     vpr1 = getProp va1 verb
     vpr2 = getProp va2 verb
