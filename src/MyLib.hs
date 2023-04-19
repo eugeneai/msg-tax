@@ -6,7 +6,6 @@
 
 module MyLib (
     Subject
-  , MorphTag
   , Morph
   , Lex
   , Message
@@ -70,9 +69,6 @@ data Subject = Subject {
   tax:: T.Text
   } deriving (Show, Generic)
 
-data MorphTag = Tag String | Tags [String]
-  deriving (Show, Generic)
-
 newtype TagSet = TagSet (Set.Set GRAM)
 
 instance Show TagSet where
@@ -84,12 +80,11 @@ data Morph = Morph {
     norm:: T.Text
   , tag:: TagSet
   , score:: Float
---  , tag:: (Maybe MessageMorphTag)
   } deriving (Show, Generic)
 
 data Lex = Lex {
     w:: T.Text
-  , ucto:: T.Text
+  , ucto:: Ucto
   , morph:: Maybe [Morph]
   } deriving (Show, Generic)
 
@@ -104,7 +99,6 @@ instance FromJSON Message
 instance FromJSON Lex
 
 instance FromJSON Morph
-instance FromJSON MorphTag
 instance FromJSON TagSet where
 
   parseJSON (Array v) = CA.pure . TagSet $ myUnpack . V.toList $ v
@@ -115,6 +109,15 @@ instance FromJSON TagSet where
       val (String s) = [readGram s]
       val (Array a) = concatMap val . V.toList $ a
       val _ = [BAD]
+  parseJSON _ = CA.empty
+
+instance FromJSON Ucto where
+  parseJSON (String s) = CA.pure $ readUcto
+    where
+      sr = TR.readMaybe . T.unpack . T.toUpper. T.replace (T.pack "-") (T.pack "_") $ s :: Maybe Ucto
+      readUcto = case sr of
+        Nothing -> UNKNOWN
+        Just a -> a
   parseJSON _ = CA.empty
 
 readGram :: T.Text -> GRAM
@@ -141,14 +144,10 @@ instance ToJSON TagSet where
     where
       f gram = String . T.pack . show $ gram
 
-instance ToJSON MorphTag
 
-
--- translateFile:: FilePath -> IO (Maybe Message)
--- translateFile filePath = do
---   a <- BL.readFile filePath
---   let obj = decode a::Maybe Message
---   IO (obj)
+instance ToJSON Ucto where
+  toJSON :: Ucto -> Value
+  toJSON u = String . T.pack . show $ u
 
 translateContent :: BL.ByteString -> Maybe Message
 translateContent content = do
@@ -180,22 +179,31 @@ version :: String
 version = "0.0.1"
 
 data Connection = AdjNoun | SubjVerb | NounNounGent
-  deriving Show
+  deriving (Show, Eq, Read)
 
-data Join = R [Join] | J Connection Join Join | M [Morph]
+data Ucto = URL | URL_WWW | URL_DOMAIN
+  | E_MAIL | ABBREVIATION_KNOWN | WORD_PARPREFIX
+  | WORD_PARSUFFIX | WORD_COMPOUND
+  | ABBREVIATION | INITIAL | SMILEY | REVERSE_SMILEY
+  | PUNCTUATION_MULTI | DATE_REVERSE | DATE
+  | NUMBER_YEAR | TIME | FRACNUMBER | NUMBER
+  | CURRENCY | WORD | PUNCTUATION | UNKNOWN
+  deriving (Show, Eq, Read)
+
+data Join = R [Join] | J Connection Join Join | M Ucto T.Text [Morph]
 
 instance Show Join where
   show (J c a b) = "(J " ++ show c ++ " " ++ tails ++ ")\n"
     where
       tails = show a ++ " " ++ show b
   show (R ts) = "(R " ++ (concatMap show $ ts) ++ ")"
-  show (M ts) = "|" ++ show ts ++ "\n"
+  show (M u w ts) = "|" ++ show u ++ " " ++ show w ++ " [ " ++ show ts ++ "]\n"
 
 toJoin :: Maybe Message -> Maybe Join
 toJoin Nothing = Nothing
 toJoin (Just msg) = Just . R . map lext . text $ msg
   where
-    lext l = M (maybe [] id $ morph l)
+    lext l = M (ucto l) (w l) (maybe [] id $ morph l)
 
 class Rule r where
   join :: r -> (Morph->Morph->Bool, Morph->Bool, Morph->Bool)
@@ -216,10 +224,10 @@ applyRule r (a:b:l) = rc
     rc = if null lm then a:(applyRule r (b:l))
          else applyRule r (nj:l)
     red :: (Join, Join) -> (Morph, Morph) -> Join
-    red (M _,     M _)     (ma, mb) = J r (M [ma]) (M [mb])
-    red (M _,     J c a b) (ma, _)  = J r (M [ma]) (J c a b)
-    red (J c a b, M _)     (_,  mb) = J r (J c a b) (M [mb])
-    red (a,       b)       (_,  _)  = J r a b
+    red (M u w _, M u' w' _) (ma, mb)  = J r (M u w [ma]) (M u' w' [mb])
+    red (M u w _, J c a b)   (ma, _)   = J r (M u w [ma]) (J c a b)
+    red (J c a b, M u w _)   (_,  mb)  = J r (J c a b)    (M u w [mb])
+    red (a,       b)         (_,  _)   = J r a b
 
 data GRAM = BAD
   | POST  | NOUN  | ADJF  | ADJS  | COMP  | VERB  | INFN  | PRTF  | PRTS
@@ -245,10 +253,10 @@ instance Rule Connection where
   join AdjNoun = (adjNounConsist, isAdj, isNoun)
   join SubjVerb = (subjVerbConsist, isSubj, isVerb)
   join NounNounGent = (isAnyRel, isNoun, isNounGent)
-  join _ = (lfm, lf, lf)
-    where
-      lf _ = False
-      lfm _ _ = False
+  -- join _ = (lfm, lf, lf)
+  --   where
+  --     lf _ = False
+  --     lfm _ _ = False
 
 minimumScore :: Float
 minimumScore = 0.01
@@ -265,7 +273,7 @@ compPairs (left, right) a b = rc
     f (a', _, _) (b', _, _) = compare a' b'
     getParJ (R l) = getParL l
     getParJ (J _ aj bj) = getParJ aj ++ getParJ bj
-    getParJ (M morphs) = morphs
+    getParJ (M _ _ morphs) = morphs
     getParL [] = []
     getParL (p:_) = getParJ p
 
@@ -363,4 +371,11 @@ subjVerbConsist subj verb = pronVerb || nounVerb
     pronVerb = ppr =*= vpr1
     nounVerb = npr =*= vpr2
 
+
+-- Use it for checking non working relations
+
+isAnyRel :: Morph -> Morph -> Bool
 isAnyRel _ _ = True
+
+isAny :: Morph -> Bool
+isAny _ = True
