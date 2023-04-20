@@ -149,8 +149,8 @@ def piping():
             w = w.strip()
             tkn = tokenize(w)
             js = dumps(tkn, ensure_ascii=False)
+            print(len(js))
             print(js)
-            print()
             sys.stdout.flush()
             logging.info("RES:" + str(js))
         if cmd == "QUIT":

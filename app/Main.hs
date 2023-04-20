@@ -29,12 +29,16 @@ processText str = do
   hSetEncoding hin utf8
   -- hSetEncoding hout utf8
   -- hSetEncoding herr utf8
-  js <- BL.hGetLine hout
+  js <- BL.hGetContents hout
   -- jse <- BL.hGetContents herr
   hPutStrLn hin $ "WORD Мама мыла"
   hFlush hin
-  US.uprint js
-  let obj = NL.translateLexs js
+  let mjs_len = BL.readInt js :: Maybe (Int, BL.ByteString)
+  let (js_len, rest) = maybe (0, js) id mjs_len :: (Int, BL.ByteString)
+  US.uprint js_len
+  g <- BL.hGet hout (js_len + 1)
+  US.uprint g
+  let obj = NL.translateLexs g
   -- US.uprint obj
   -- BL.putStrLn $ js
   case obj of
