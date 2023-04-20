@@ -25,5 +25,5 @@ main = do
       let appl2 = NL.joinPass appl1
       let appl3 = NL.joinPass appl2
       US.uprint appl3
-      US.uprint (appl3 == appl2)
       US.uprint (appl2 == appl1)
+      US.uprint (appl3 == appl2)

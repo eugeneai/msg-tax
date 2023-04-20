@@ -211,6 +211,7 @@ toJoin (Just msg) = Just . map lext . text $ msg
 
 class Rule r where
   join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
+  join3 :: (r, String) -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
 
 joinPass :: [[Join]] -> [[Join]]
 joinPass l = applyRule l
@@ -218,7 +219,25 @@ joinPass l = applyRule l
 applyRule :: [[Join]] -> [[Join]]
 applyRule [] = []
 applyRule [e] = [e]
-applyRule (as:bs:l) = rc
+applyRule (as:word:bs:l) = rc
+  where
+    lm = [ (score, ma, mb, r) |
+           (P _ word' _) <- word,
+           r <- rules,
+           (mjoin, left, right, rev) <- [join3 (r, T.unpack word')],
+           (score, ma, mb) <- compPairs (left, right) as bs rev,
+           mjoin ma mb ]
+
+    rules = maybe [] (Set.toList) (M.lookup JOIN3 grams)
+    nj = map red lm
+    rc = if null lm then (applyRule2 (as:word:bs:l))
+         else applyRule (nj:l)
+    red :: (Float, Join, Join, GRAM) -> Join
+    red (s, a, b, r) = J r a b s
+applyRule (as:bs:[]) = applyRule2 (as:bs:[])
+
+applyRule2 :: [[Join]] -> [[Join]]
+applyRule2 (as:bs:l) = rc
   where
     lm = [ (score, ma, mb, r) |
            r <- rules,
@@ -227,10 +246,6 @@ applyRule (as:bs:l) = rc
            mjoin ma mb ]
 
     rules = maybe [] (Set.toList) (M.lookup JOIN grams)
-
---    f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
---    f (a', _, _) (b', _, _) = compare a' b'
-
     nj = map red lm
     rc = if null lm then as:(applyRule (bs:l))
          else applyRule (nj:l)
@@ -262,6 +277,8 @@ data GRAM = BAD
   | JOIN
   | AdjNoun | NumrNoun | SubjVerb | NounNounGent | Percent
   | PhoneNumber
+  | JOIN3
+  | ForJoin | NounInNoun
   deriving (Show, Read, Ord, Eq)
 
 
@@ -295,6 +312,7 @@ grams = M.fromList [
                         , CURRENCY, WORD, PUNCTUATION, UNKNOWN])
   , (JOIN, Set.fromList [AdjNoun, SubjVerb, NounNounGent, Percent
                         , PhoneNumber, NumrNoun ])
+  , (JOIN3, Set.fromList [ForJoin, NounInNoun])
   ]
 
 
@@ -314,8 +332,15 @@ instance Rule GRAM where
     where lf _ = False
           lfm _ _ = False
 
+  join3 :: (GRAM, String) -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool, Bool)
+  join3 (ForJoin, "для") = (isAnyRel, isNoun, isNoun, False)
+  join3 (NounInNoun, "в") = (isAnyRel, isNoun, isNounLoct, False)
+  join3 _ = (lfm, lf, lf, False)
+    where lf _ = False
+          lfm _ _ = False
+
 minimumScore :: Float
-minimumScore = 0.00
+minimumScore = 1e-4
 
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
@@ -377,6 +402,9 @@ isNounNomn n = isNoun n && isNomn n
 isNounGent :: Join -> Bool
 isNounGent n = isNoun n && isGent n
 
+isNounLoct :: Join -> Bool
+isNounLoct n = isNoun n && isLoct n
+
 isNomn :: Join -> Bool
 isNomn (P pos _ m) = lexTest [NOMN] m
 isNomn _ = False
@@ -384,6 +412,10 @@ isNomn _ = False
 isGent :: Join -> Bool
 isGent (P pos _ m) = lexTest [GENT] m
 isGent _ = False
+
+isLoct :: Join -> Bool
+isLoct (P pos _ m) = lexTest [LOCT] m
+isLoct _ = False
 
 isNoun :: Join -> Bool
 isNoun (P NOUN  _ _) = True
