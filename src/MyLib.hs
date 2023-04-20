@@ -441,8 +441,10 @@ isNumber (P NUMBER w _) =
     Just n -> True
 isNumber _ = False
 
+isPhoneNumber :: Join -> Bool
 isPhoneNumber l = isNumber l && hasLength 11 l
 
+hasLength :: Int -> Join -> Bool
 hasLength l (P _ w _) = T.length w == l
 hasLength _ _ = False
 
@@ -450,6 +452,7 @@ isPercent :: Join -> Bool
 isPercent (P PUNCTUATION percent _) = percent == T.pack "%"
 isPercent _ = False
 
+isWord :: String -> Join -> Bool
 isWord word (P _ w _ ) = w == T.pack word
 isWord _ _ = False
 
@@ -457,6 +460,7 @@ isWord _ _ = False
 adjNounConsist :: Join -> Join -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
 
+numrNounConsist :: Join -> Join -> Bool
 numrNounConsist (P _ _ a) (P _ _ b) = sa =*= sb
   where
     as = [CASE]
@@ -516,4 +520,5 @@ isAnyRel _ _ = True
 isAny :: Join -> Bool
 isAny _ = True
 
+isGram :: GRAM -> Morph -> Bool
 isGram gram = lexTest [gram]
