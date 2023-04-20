@@ -18,11 +18,12 @@ main = do
   US.uprint . NL.toNorm $ obj
   putStrLn "\n-------------\n"
   let tran = NL.toJoin obj
-  let joinRule = NL.join NL.AdjNoun
   case tran of
     Nothing -> print "No parse"
     Just appl -> do
-      let appl1 = NL.joinPass NL.NounNounGent appl
-      let appl2 = NL.joinPass NL.AdjNoun appl1
-      let appl3 = NL.joinPass NL.SubjVerb appl2
+      let appl1 = NL.joinPass appl
+      let appl2 = NL.joinPass appl1
+      let appl3 = NL.joinPass appl2
       US.uprint appl3
+      US.uprint (appl3 == appl2)
+      US.uprint (appl2 == appl1)

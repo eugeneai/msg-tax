@@ -71,6 +71,7 @@ data Subject = Subject {
   } deriving (Show, Generic)
 
 newtype TagSet = TagSet (Set.Set GRAM)
+  deriving (Eq)
 
 instance Show TagSet where
   show (TagSet s)
@@ -81,11 +82,11 @@ data Morph = Morph {
     norm:: T.Text
   , tag:: TagSet
   , score:: Float
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Eq)
 
 data Lex = Lex {
     w:: T.Text
-  , ucto:: Ucto
+  , ucto:: GRAM
   , morph:: Maybe [Morph]
   } deriving (Show, Generic)
 
@@ -112,25 +113,20 @@ instance FromJSON TagSet where
       val _ = [BAD]
   parseJSON _ = CA.empty
 
-instance FromJSON Ucto where
-  parseJSON (String s) = CA.pure $ readUcto
-    where
-      sr = TR.readMaybe . T.unpack . T.toUpper. T.replace (T.pack "-") (T.pack "_") $ s :: Maybe Ucto
-      readUcto = case sr of
-        Nothing -> UNKNOWN
-        Just a -> a
+instance FromJSON GRAM where
+  parseJSON (String s) = CA.pure $ readGram s
   parseJSON _ = CA.empty
 
 readGram :: T.Text -> GRAM
 readGram t =
-  let rm = TR.readMaybe . T.unpack . T.toUpper $ t :: Maybe GRAM
+  let rm =TR.readMaybe . T.unpack . T.toUpper. T.replace (T.pack "-") (T.pack "_") $ t :: Maybe GRAM
   in
     case rm of
       Nothing -> case T.unpack . T.toUpper $ t of
         "1PER" -> PER1
         "2PER" -> PER3
         "3PER" -> PER3
-        _ -> Unrec t
+        _ -> UNKNOWN
       Just g -> g :: GRAM
 
 instance ToJSON Subject
@@ -146,8 +142,8 @@ instance ToJSON TagSet where
       f gram = String . T.pack . show $ gram
 
 
-instance ToJSON Ucto where
-  toJSON :: Ucto -> Value
+instance ToJSON GRAM where
+  toJSON :: GRAM -> Value
   toJSON u = String . T.pack . show $ u
 
 translateContent :: BL.ByteString -> Maybe Message
@@ -179,17 +175,12 @@ convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 version :: String
 version = "0.0.1"
 
-data Ucto = URL | URL_WWW | URL_DOMAIN
-  | E_MAIL | ABBREVIATION_KNOWN | WORD_PARPREFIX
-  | WORD_PARSUFFIX | WORD_COMPOUND
-  | ABBREVIATION | INITIAL | SMILEY | REVERSE_SMILEY
-  | PUNCTUATION_MULTI | DATE_REVERSE | DATE
-  | NUMBER_YEAR | TIME | FRACNUMBER | NUMBER
-  | CURRENCY | WORD | PUNCTUATION | UNKNOWN
-  deriving (Show, Eq, Read)
+-- data Ucto =
+--   deriving (Show, Eq, Read)
 
 data Join = J GRAM Join Join Float
           | P GRAM T.Text Morph
+          deriving (Eq)
 
 instance Show Join where
   show (J c a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
@@ -203,7 +194,7 @@ toJoin (Just msg) = Just . map lext . text $ msg
   where
     lext lex =
       let rc = go lex
-      in if L.null rc then [P UNKN (w lex) (Morph (w lex) (TagSet Set.empty) 1.0)]
+      in if L.null rc then [P (ucto lex) (w lex) (Morph (w lex) (TagSet Set.empty) 1.0)]
          else rc
 
     go l = [ P gram (w l) (conv gram m) |
@@ -219,29 +210,32 @@ toJoin (Just msg) = Just . map lext . text $ msg
                Just m -> m
 
 class Rule r where
-  join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool)
+  join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
 
-joinPass :: GRAM -> [[Join]] -> [[Join]]
-joinPass r l = applyRule r l
+joinPass :: [[Join]] -> [[Join]]
+joinPass l = applyRule l
 
-applyRule :: GRAM -> [[Join]] -> [[Join]]
-applyRule _ [] = []
-applyRule _ [e] = [e]
-applyRule r (as:bs:l) = rc
+applyRule :: [[Join]] -> [[Join]]
+applyRule [] = []
+applyRule [e] = [e]
+applyRule (as:bs:l) = rc
   where
-    (mjoin, left, right) = join r
-    lm = [ (score, ma, mb) |
-           (score, ma, mb) <- compPairs (left, right) as bs,
-           mjoin ma mb ] :: [(Float, Join, Join)]
+    lm = [ (score, ma, mb, r) |
+           r <- rules,
+           (mjoin, left, right, rev) <- [join r],
+           (score, ma, mb) <- compPairs (left, right) as bs rev,
+           mjoin ma mb ]
+
+    rules = maybe [] (Set.toList) (M.lookup JOIN grams)
 
 --    f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
 --    f (a', _, _) (b', _, _) = compare a' b'
 
     nj = map red lm
-    rc = if null lm then as:(applyRule r (bs:l))
-         else applyRule r (nj:l)
-    red :: (Float, Join, Join) -> Join
-    red (s, a, b) = J r a b s
+    rc = if null lm then as:(applyRule (bs:l))
+         else applyRule (nj:l)
+    red :: (Float, Join, Join, GRAM) -> Join
+    red (s, a, b, r) = J r a b s
 
 data GRAM = BAD
   | POST  | NOUN  | ADJF  | ADJS  | COMP  | VERB  | INFN  | PRTF  | PRTS
@@ -257,7 +251,17 @@ data GRAM = BAD
   | V_IE  | V_BI  | FIMP  | PRDX  | COUN  | COLL  | V_SH  | AF_P  | INMX  | VPRE
   | ANPH  | INIT  | ADJX  | HYPO  | LATN  | UNKN
   | Unrec T.Text -- For all unknown
-  | AdjNoun | SubjVerb | NounNounGent
+  | UCTO
+  | URL | URL_WWW | URL_DOMAIN -- Ucto
+  | E_MAIL | ABBREVIATION_KNOWN | WORD_PARPREFIX
+  | WORD_PARSUFFIX | WORD_COMPOUND
+  | ABBREVIATION | INITIAL | SMILEY | REVERSE_SMILEY
+  | PUNCTUATION_MULTI | DATE_REVERSE | DATE
+  | NUMBER_YEAR | TIME | FRACNUMBER | NUMBER
+  | CURRENCY | WORD | PUNCTUATION | UNKNOWN
+  | JOIN
+  | AdjNoun | NumrNoun | SubjVerb | NounNounGent | Percent
+  | PhoneNumber
   deriving (Show, Read, Ord, Eq)
 
 
@@ -281,29 +285,45 @@ grams = M.fromList [
   , (TENS, Set.fromList [PRES, PAST, FUTR])
   , (MOOD, Set.fromList [INDC, IMPR])
   , (INVL, Set.fromList [INCL, EXCL])
-  , (VOIC, Set.fromList [ACTV, PSSV])]
+  , (VOIC, Set.fromList [ACTV, PSSV])
+  , (UCTO, Set.fromList [URL, URL_WWW, URL_DOMAIN
+                        , E_MAIL, ABBREVIATION_KNOWN, WORD_PARPREFIX
+                        , WORD_PARSUFFIX, WORD_COMPOUND
+                        , ABBREVIATION, INITIAL, SMILEY, REVERSE_SMILEY
+                        , PUNCTUATION_MULTI, DATE_REVERSE, DATE
+                        , NUMBER_YEAR, TIME, FRACNUMBER, NUMBER
+                        , CURRENCY, WORD, PUNCTUATION, UNKNOWN])
+  , (JOIN, Set.fromList [AdjNoun, SubjVerb, NounNounGent, Percent
+                        , PhoneNumber, NumrNoun ])
+  ]
 
 
 
 -- Simple Grammar rules
 
 instance Rule GRAM where
-  join :: GRAM -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool)
-  join AdjNoun = (adjNounConsist, isAdj, isNoun)
-  join SubjVerb = (subjVerbConsist, isSubj, isVerb)
-  join NounNounGent = (isAnyRel, isNoun, isNounGent)
-  join _ = (lfm, lf, lf)
+
+  join :: GRAM -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool, Bool)
+  join AdjNoun = (adjNounConsist, isAdj, isNoun, False)
+  join NumrNoun = (numrNounConsist, isNumr, isNoun, True)
+  join SubjVerb = (subjVerbConsist, isSubj, isVerb, False)
+  join NounNounGent = (isAnyRel, isNoun, isNounGent, False)
+  join Percent = (isAnyRel, isNum100, isPercent, False)
+  join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber, False)
+  join _ = (lfm, lf, lf, False)
     where lf _ = False
           lfm _ _ = False
 
 minimumScore :: Float
-minimumScore = 0.01
+minimumScore = 0.00
 
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
 
-compPairs :: (Join->Bool, Join->Bool) -> [Join] -> [Join] -> [(Float, Join, Join)]
-compPairs (left, right) as bs = rc
+compPairs :: (Join->Bool, Join->Bool) -> [Join] -> [Join] -> Bool -> [(Float, Join, Join)]
+compPairs (left, right) as bs rev = if rev
+                                    then L.sortBy f $ (rc ++ revrc)
+                                    else rc
   where
     rc = L.sortBy f $ [ (calcS aa' bb', aa', bb') |
                         aa <- as,
@@ -312,7 +332,16 @@ compPairs (left, right) as bs = rc
                         bb <- bs,
                         bb' <- [getParJ RightSide bb],
                         right bb',
-                        calcS aa' bb' > minimumScore]
+                        calcS aa' bb' >= minimumScore]
+
+    revrc = L.sortBy f $ [ (calcS aa' bb', aa', bb') |
+                        aa <- bs,
+                        aa' <- [getParJ LeftSide aa],
+                        left aa',
+                        bb <- as,
+                        bb' <- [getParJ RightSide bb],
+                        right bb',
+                        calcS aa' bb' >= minimumScore]
     g (_, b', c') = (b',c')
 
     f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
@@ -364,8 +393,43 @@ isAdj:: Join -> Bool
 isAdj (P ADJF _ _) = True
 isAdj _ = False
 
+isNumr (P NUMR _ _) = True
+isNumr _ =False
+
+isNum100 :: Join -> Bool
+isNum100 (P NUMBER w _) =
+  case (TR.readMaybe (T.unpack w))::Maybe Int of
+    Nothing -> False
+    Just n -> n <= 100
+isNum100 _ = False
+
+isNumber (P NUMBER w _) =
+  case (TR.readMaybe (T.unpack w))::Maybe Int of
+    Nothing -> False
+    Just n -> True
+isNumber _ = False
+
+isPhoneNumber l = isNumber l && hasLength 11 l
+
+hasLength l (P _ w _) = T.length w == l
+hasLength _ _ = False
+
+isPercent :: Join -> Bool
+isPercent (P PUNCTUATION percent _) = percent == T.pack "%"
+isPercent _ = False
+
+isWord word (P _ w _ ) = w == T.pack word
+isWord _ _ = False
+
+
 adjNounConsist :: Join -> Join -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
+
+numrNounConsist (P _ _ a) (P _ _ b) = sa =*= sb
+  where
+    as = [CASE]
+    sa = getProp as a
+    sb = getProp as b
 
 getProp :: [GRAM] -> Morph -> Set.Set GRAM
 getProp [cls] m =
