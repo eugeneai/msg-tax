@@ -7,7 +7,8 @@ import sys
 import logging
 
 logging.basicConfig(filename='tokenizer.log',
-                    encoding='utf-8', level=logging.DEBUG)
+                    encoding='utf-8',
+                    level=logging.DEBUG)
 
 if not hasattr(inspect, 'getargspec'):
     inspect.getargspec = inspect.getfullargspec
@@ -113,7 +114,9 @@ def tokenize(t):
 def mainlearn():
     fromfile("data/posts.json")
 
+
 DEBUG = False
+
 
 def fromfile(filename):
     for js in gen(filename):
@@ -135,6 +138,7 @@ def fromfile(filename):
         if DEBUG:
             break
 
+
 def piping():
     while True:
         cmd = input()
@@ -151,6 +155,7 @@ def piping():
             logging.info("RES:" + str(js))
         if cmd == "QUIT":
             return
+
 
 if __name__ == "__main__":
     prepDT()
