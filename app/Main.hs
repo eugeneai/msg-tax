@@ -5,6 +5,11 @@ import qualified Text.Show.Unicode as US
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Prelude.Compat (id)
 
+repeatPass p appl =
+  let a2 = p appl in
+    if a2 /= appl then repeatPass p a2
+    else a2
+
 main :: IO ()
 main = do
   putStrLn "Running main"
@@ -21,9 +26,5 @@ main = do
   case tran of
     Nothing -> print "No parse"
     Just appl -> do
-      let appl1 = NL.joinPass appl
-      let appl2 = NL.joinPass appl1
-      let appl3 = NL.joinPass appl2
-      US.uprint appl3
-      US.uprint (appl2 == appl1)
-      US.uprint (appl3 == appl2)
+      let appl2 = repeatPass NL.joinPass appl
+      US.uprint appl2

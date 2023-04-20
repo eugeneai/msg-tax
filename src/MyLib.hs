@@ -162,7 +162,7 @@ toNorm = convertMsg defNoParse c
   where
     c lex = case morph lex of
       Nothing -> w lex
-      Just morphs -> go morphs -- T.concatMap gonorm morphs
+      Just morphs -> go morphs
     go :: [Morph] -> T.Text
     go xs = T.intercalate "/" . map gonorm $ xs :: T.Text
     gonorm :: Morph -> T.Text
@@ -305,7 +305,7 @@ grams = M.fromList [
   , (LOCT, Set.fromList [LOC1, LOC2])
   , (ASPC, Set.fromList [PERF, IMPF])
   , (TRNS, Set.fromList [TRAN, INTR])
-  , (PERS, Set.fromList [PER1, PER2, PER3])
+  , (PERS, Set.fromList [PER1, PER2, PER3, NPRO])
   , (TENS, Set.fromList [PRES, PAST, FUTR])
   , (MOOD, Set.fromList [INDC, IMPR])
   , (INVL, Set.fromList [INCL, EXCL])
@@ -340,16 +340,16 @@ instance Rule GRAM where
           lfm _ _ = False
 
   join3 :: (GRAM, String) -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool, Bool)
-  join3 (ForJoin, "для") = (isAnyRel, isNoun, isNoun, False)
+  join3 (ForJoin, "для") = (isAnyRel, isNoun, isNounGent, False)
   join3 (NounInNoun, "в") = (isAnyRel, isNoun, isNounLoct, False)
   join3 _ = (lfm, lf, lf, False)
     where lf _ = False
           lfm _ _ = False
 
 minimumScore :: Float
-minimumScore = 1e-4
+minimumScore = 0 -- 1e-4
 topN :: Int
-topN = 7
+topN = 20
 
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
@@ -502,7 +502,7 @@ sameDeclination (P _ _ a) (P _ _ b) = sa =*= sb
 a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 
 pronouns :: Set.Set GRAM
-pronouns = Set.fromList [PER1, PER2, PER3]
+pronouns = Set.fromList [PER1, PER2, PER3, NPRO]
 
 isPronoun :: Join -> Bool
 isPronoun (P pr _ _) = Set.member pr pronouns
