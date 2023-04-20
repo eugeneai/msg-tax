@@ -19,7 +19,7 @@ repeatPass p appl =
 
 processText :: T.Text -> IO () --  Maybe NL.Join
 processText str = do
-  (Just hin, Just hout, Just herr, _) <- createProcess
+  (Just hin, Just hout, Just herr, pid) <- createProcess
     -- (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
     (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
     {cwd = Just "/home/eugeneai/projects/code/haskell/msg-tax",
@@ -27,21 +27,24 @@ processText str = do
      std_in = CreatePipe,
      std_err = CreatePipe}
   hSetEncoding hin utf8
-  hSetEncoding hout utf8
-  hSetEncoding herr utf8
-  js <- BL.hGetContents hout
+  -- hSetEncoding hout utf8
+  -- hSetEncoding herr utf8
+  js <- BL.hGetLine hout
+  -- jse <- BL.hGetContents herr
   hPutStrLn hin $ "WORD Мама мыла"
   hFlush hin
+  US.uprint js
   let obj = NL.translateLexs js
-  -- US.uprint js
-  US.uprint obj
-  -- BL.putStrLn js
+  -- US.uprint obj
+  -- BL.putStrLn $ js
   case obj of
     Nothing -> do
       putStrLn "Error: cannot parse response"
-      BL.putStrLn js
     Just o -> do
       let tran = NL.lexsToJoin o
+      putStrLn "Parsed"
+      US.uprint tran
+
       case tran of
         Nothing -> do
           err <- BL.hGetContents herr
@@ -49,9 +52,10 @@ processText str = do
           BL.putStrLn err
         Just appl -> do
           let appl2 = repeatPass NL.joinPass appl
-          US.uprint appl2
+          US.uprint . take 10 . show $ appl2
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
+  waitForProcess pid
   hClose hin
 
 

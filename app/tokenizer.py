@@ -144,9 +144,11 @@ def piping():
             _, w = cmd.split("WORD", 1)
             w = w.strip()
             tkn = tokenize(w)
-            print(tkn)
-            logging.info("RES:" + str(tkn))
-        sys.stdout.flush()
+            js = dumps(tkn, ensure_ascii=False)
+            print(js)
+            print()
+            sys.stdout.flush()
+            logging.info("RES:" + str(js))
         if cmd == "QUIT":
             return
 
@@ -154,7 +156,7 @@ if __name__ == "__main__":
     prepDT()
     # print(DT.keys())
     args = sys.argv[1:]
-    optlist, args = getopt.getopt(args, 'i:w:s:pdv')
+    optlist, args = getopt.getopt(args, 'i:w:s:pdvt')
     for o, v in optlist:
         if o == "-d":
             DEBUG = True
@@ -168,4 +170,6 @@ if __name__ == "__main__":
             print("""Version string\n\n""")
         elif o == "-p":
             piping()
+        elif o == "-t":
+            mainlearn()
     # print(optlist, args)
