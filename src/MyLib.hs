@@ -225,11 +225,11 @@ applyRule (as:word:bs:l) = rc
            (P _ word' _) <- word,
            r <- rules,
            (mjoin, left, right, rev) <- [join3 (r, T.unpack word')],
-           (score, ma, mb) <- compPairs (left, right) as bs rev,
+           (score, ma, mb) <- scoreSort $ compPairs (left, right) as bs rev,
            mjoin ma mb ]
 
     rules = maybe [] (Set.toList) (M.lookup JOIN3 grams)
-    nj = map red lm
+    nj = map red . L.take topN $ lm
     rc = if null lm then (applyRule2 (as:word:bs:l))
          else applyRule (nj:l)
     red :: (Float, Join, Join, GRAM) -> Join
@@ -242,15 +242,22 @@ applyRule2 (as:bs:l) = rc
     lm = [ (score, ma, mb, r) |
            r <- rules,
            (mjoin, left, right, rev) <- [join r],
-           (score, ma, mb) <- compPairs (left, right) as bs rev,
+           (score, ma, mb) <- scoreSort $ compPairs (left, right) as bs rev,
            mjoin ma mb ]
 
     rules = maybe [] (Set.toList) (M.lookup JOIN grams)
-    nj = map red lm
+    nj = map red . L.take topN $ lm
     rc = if null lm then as:(applyRule (bs:l))
          else applyRule (nj:l)
     red :: (Float, Join, Join, GRAM) -> Join
     red (s, a, b, r) = J r a b s
+
+
+scoreSort :: [(Float, Join, Join)] -> [(Float, Join, Join)]
+scoreSort l = L.sortBy f l
+  where
+    f (a', _, _) (b', _, _) = compare b' a' -- descending
+
 
 data GRAM = BAD
   | POST  | NOUN  | ADJF  | ADJS  | COMP  | VERB  | INFN  | PRTF  | PRTS
@@ -341,36 +348,36 @@ instance Rule GRAM where
 
 minimumScore :: Float
 minimumScore = 1e-4
+topN :: Int
+topN = 7
 
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
 
 compPairs :: (Join->Bool, Join->Bool) -> [Join] -> [Join] -> Bool -> [(Float, Join, Join)]
 compPairs (left, right) as bs rev = if rev
-                                    then L.sortBy f $ (rc ++ revrc)
+                                    then L.take topN . scoreSort $ (rc ++ revrc)
                                     else rc
   where
-    rc = L.sortBy f $ [ (calcS aa' bb', aa', bb') |
-                        aa <- as,
+    rc = scoreSort $ [ (calcS aa' bb', aa', bb') |
+                        aa <- taken as,
                         aa' <- [getParJ LeftSide aa],
                         left aa',
-                        bb <- bs,
+                        bb <- taken bs,
+
                         bb' <- [getParJ RightSide bb],
                         right bb',
                         calcS aa' bb' >= minimumScore]
 
-    revrc = L.sortBy f $ [ (calcS aa' bb', aa', bb') |
-                        aa <- bs,
+    revrc = scoreSort $ [ (calcS aa' bb', aa', bb') |
+                        aa <- taken bs,
                         aa' <- [getParJ LeftSide aa],
                         left aa',
-                        bb <- as,
+                        bb <- taken as,
                         bb' <- [getParJ RightSide bb],
                         right bb',
                         calcS aa' bb' >= minimumScore]
     g (_, b', c') = (b',c')
-
-    f :: (Float, Join, Join) -> (Float, Join, Join) -> Ordering
-    f (a', _, _) (b', _, _) = compare b' a' -- descending
 
     getParJ :: RelSide -> Join -> Join
     getParJ LeftSide (J _ aj _ _) = getParJ LeftSide aj
@@ -381,6 +388,7 @@ compPairs (left, right) as bs rev = if rev
     calcS j1 j2 = (sco j1) * (sco j2)
     sco (P _ _ a1) = score a1
     sco (J _ a1 b1 s) = s -- (calcS a1 b1)
+    taken = L.take topN
 
 lexTest :: [GRAM] -> Morph -> Bool
 lexTest [] _ = True
