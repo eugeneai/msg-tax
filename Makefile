@@ -1,10 +1,10 @@
-.PHONY: run build check prep repl
+.PHONY: run build check prep repl sent
 
 PYTARGET=app/tokenizer.py
 PKG=msg-tax
 
 run: build check
-	python $(PYTARGET) | cabal run
+	python $(PYTARGET) -d -i data/posts.json | cabal v2-run msg-tax -- -t
 
 build:
 	cabal build
@@ -17,3 +17,7 @@ prep: check
 
 repl: build
 	cabal v2-repl exe:$(PKG)
+
+
+sent: build
+	cabal v2-run msg-tax -- -s "Мама мыла раму"

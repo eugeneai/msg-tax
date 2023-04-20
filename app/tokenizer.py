@@ -2,6 +2,12 @@ import ucto
 from json import load, loads, dumps
 import pymorphy2
 import inspect
+import getopt
+import sys
+import logging
+
+logging.basicConfig(filename='tokenizer.log',
+                    encoding='utf-8', level=logging.DEBUG)
 
 if not hasattr(inspect, 'getargspec'):
     inspect.getargspec = inspect.getfullargspec
@@ -104,10 +110,13 @@ def tokenize(t):
     return toks
 
 
-if __name__ == "__main__":
-    prepDT()
-    # print(DT.keys())
-    for js in gen("data/posts.json"):
+def mainlearn():
+    fromfile("data/posts.json")
+
+DEBUG = False
+
+def fromfile(filename):
+    for js in gen(filename):
         try:
             t = js["text"]
             s = js["subjects"]
@@ -115,7 +124,6 @@ if __name__ == "__main__":
             for k, v in s.items():
                 dc = {}
                 dc["name"] = k
-                # dc.update(v)
                 dc["tax"] = v["classes"]
                 li.append(dc)
             nt = tokenize(t)
@@ -124,4 +132,40 @@ if __name__ == "__main__":
         except KeyError:
             print("BAD")
             print(dumps(js, ensure_ascii=False))
-        break
+        if DEBUG:
+            break
+
+def piping():
+    while True:
+        cmd = input()
+        # print("~"+cmd)
+        logging.info("CMD: " + cmd)
+        if cmd.startswith("WORD"):
+            _, w = cmd.split("WORD", 1)
+            w = w.strip()
+            tkn = tokenize(w)
+            print(tkn)
+            logging.info("RES:" + str(tkn))
+        sys.stdout.flush()
+        if cmd == "QUIT":
+            return
+
+if __name__ == "__main__":
+    prepDT()
+    # print(DT.keys())
+    args = sys.argv[1:]
+    optlist, args = getopt.getopt(args, 'i:w:s:pdv')
+    for o, v in optlist:
+        if o == "-d":
+            DEBUG = True
+        elif o == "-i":
+            fromfile(v)
+        elif o == "-w":
+            word(v)
+        elif o == "-s":
+            sent(v)
+        elif o == "-v":
+            print("""Version string\n\n""")
+        elif o == "-p":
+            piping()
+    # print(optlist, args)

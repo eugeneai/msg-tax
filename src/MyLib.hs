@@ -10,12 +10,15 @@ module MyLib (
   , Lex
   , Message
   , translateContent
+  , translateLexs
   , toText
   , toNorm
   , convertMsg
   , toJoin
+  , lexsToJoin
   , joinPass
   , GRAM (AdjNoun, SubjVerb, NounNounGent)
+  , Join
   , join
   , text
   , version) where
@@ -101,8 +104,8 @@ instance FromJSON Message
 instance FromJSON Lex
 
 instance FromJSON Morph
-instance FromJSON TagSet where
 
+instance FromJSON TagSet where
   parseJSON (Array v) = CA.pure . TagSet $ myUnpack . V.toList $ v
     where
       myUnpack :: [Value] -> Set.Set GRAM
@@ -135,7 +138,6 @@ instance ToJSON Lex
 instance ToJSON Morph
 
 instance ToJSON TagSet where
-
   toJSON :: TagSet -> Value
   toJSON (TagSet s) = Array . V.fromList . map f . Set.toList $ s
     where
@@ -149,6 +151,11 @@ instance ToJSON GRAM where
 translateContent :: BL.ByteString -> Maybe Message
 translateContent content = do
   let obj = decode content :: Maybe Message
+  obj
+
+translateLexs :: BL.ByteString -> Maybe [Lex]
+translateLexs content = do
+  let obj = decode content :: Maybe [Lex]
   obj
 
 defNoParse :: T.Text
@@ -188,9 +195,8 @@ instance Show Join where
       tails = show a ++ " " ++ show b
   show (P u w ts) = "<" ++ show u ++ "> " ++ show w ++ " / " ++ show ts ++ "\n"
 
-toJoin :: Maybe Message -> Maybe [[Join]]
-toJoin Nothing = Nothing
-toJoin (Just msg) = Just . map lext . text $ msg
+
+lexsToJoin lexs = Just . map lext $ lexs
   where
     lext lex =
       let rc = go lex
@@ -208,6 +214,11 @@ toJoin (Just msg) = Just . map lext . text $ msg
     morphs l = case morph l of
                Nothing -> []
                Just m -> m
+
+
+toJoin :: Maybe Message -> Maybe [[Join]]
+toJoin Nothing = Nothing
+toJoin (Just msg) = lexsToJoin . text $ msg
 
 class Rule r where
   join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
@@ -530,3 +541,6 @@ isAny _ = True
 
 isGram :: GRAM -> Morph -> Bool
 isGram gram = lexTest [gram]
+
+
+-- https://reshutest.ru/theory/8?theory_id=120

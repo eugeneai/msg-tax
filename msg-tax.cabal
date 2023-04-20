@@ -77,6 +77,9 @@ library
                     , unicode-show
                     , containers
                     , vector
+                    , process
+                    , utf8-string
+--                    , encoding
     -- Directories containing source files.
     hs-source-dirs:   src
 
@@ -107,6 +110,9 @@ executable msg-tax
                          , unicode-show
                          , containers
                     , vector
+                    , process
+                    , utf8-string
+--                    , encoding
 
     -- Directories containing source files.
     hs-source-dirs:   app

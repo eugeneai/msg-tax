@@ -1,18 +1,63 @@
 module Main (main) where
 
 import qualified MyLib as NL
+import qualified Data.List as L
+import qualified Data.Text as T
 import qualified Text.Show.Unicode as US
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Prelude.Compat (id)
+import System.Environment
+import System.Process
+import System.IO
 
 repeatPass p appl =
   let a2 = p appl in
     if a2 /= appl then repeatPass p a2
     else a2
 
-main :: IO ()
-main = do
-  putStrLn "Running main"
+
+
+processText :: T.Text -> IO () --  Maybe NL.Join
+processText str = do
+  (Just hin, Just hout, Just herr, _) <- createProcess
+    -- (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
+    (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
+    {cwd = Just "/home/eugeneai/projects/code/haskell/msg-tax",
+     std_out = CreatePipe,
+     std_in = CreatePipe,
+     std_err = CreatePipe}
+  hSetEncoding hin utf8
+  hSetEncoding hout utf8
+  hSetEncoding herr utf8
+  js <- BL.hGetContents hout
+  hPutStrLn hin $ "WORD Мама мыла"
+  hFlush hin
+  let obj = NL.translateLexs js
+  -- US.uprint js
+  US.uprint obj
+  -- BL.putStrLn js
+  case obj of
+    Nothing -> do
+      putStrLn "Error: cannot parse response"
+      BL.putStrLn js
+    Just o -> do
+      let tran = NL.lexsToJoin o
+      case tran of
+        Nothing -> do
+          err <- BL.hGetContents herr
+          putStrLn "Error:"
+          BL.putStrLn err
+        Just appl -> do
+          let appl2 = repeatPass NL.joinPass appl
+          US.uprint appl2
+  BL.hPutStrLn hin . BL.pack $ "QUIT"
+  hFlush hin
+  hClose hin
+
+
+stdinProc :: IO ()
+stdinProc = do
+  putStrLn "Processing stdin"
   js <- BL.getContents
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
@@ -28,3 +73,12 @@ main = do
     Just appl -> do
       let appl2 = repeatPass NL.joinPass appl
       US.uprint appl2
+
+main :: IO ()
+main = do
+  args <- getArgs
+  if elem "-t" args then do stdinProc
+    else if elem "-s" args then do
+    let str = unwords . tail . L.takeWhile (/="-t") $ args
+    processText . T.pack $ str
+    else putStrLn "Wrong arguments"
