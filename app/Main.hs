@@ -16,6 +16,18 @@ repeatPass p appl =
     else a2
 
 
+inputJSON :: Handle -> IO BL.ByteString
+inputJSON hout = do
+  bs_len <- BL.hGet hout 10
+  let mjs_len = BL.readInt bs_len
+  case mjs_len :: Maybe (Int, BL.ByteString) of
+    Nothing -> pure $ BL.pack ""
+    Just (js_len, _) -> do
+      _ <- BL.hGet hout 1 -- Space between size and JSON
+      js <- BL.hGet hout js_len
+      return js
+
+
 
 processText :: T.Text -> IO () --  Maybe NL.Join
 processText str = do
@@ -29,34 +41,31 @@ processText str = do
   hSetEncoding hin utf8
   -- hSetEncoding hout utf8
   -- hSetEncoding herr utf8
-  js <- BL.hGetContents hout
+  -- js <- BL.hGetContents hout
   -- jse <- BL.hGetContents herr
-  hPutStrLn hin $ "WORD Мама мыла"
+  -- hPutStrLn hin $ "WORD Мама мыла"
+  hPutStrLn hin $ "WORD There is"
   hFlush hin
-  let mjs_len = BL.readInt js :: Maybe (Int, BL.ByteString)
-  let (js_len, rest) = maybe (0, js) id mjs_len :: (Int, BL.ByteString)
-  US.uprint js_len
-  g <- BL.hGet hout (js_len + 1)
-  US.uprint g
-  let obj = NL.translateLexs g
+  js <- inputJSON hout
+  US.uprint js
+  let obj = NL.translateLexs js
   -- US.uprint obj
   -- BL.putStrLn $ js
   case obj of
-    Nothing -> do
-      putStrLn "Error: cannot parse response"
-    Just o -> do
-      let tran = NL.lexsToJoin o
-      putStrLn "Parsed"
-      US.uprint tran
-
-      case tran of
         Nothing -> do
-          err <- BL.hGetContents herr
-          putStrLn "Error:"
-          BL.putStrLn err
-        Just appl -> do
-          let appl2 = repeatPass NL.joinPass appl
-          US.uprint . take 10 . show $ appl2
+          putStrLn "Error: cannot parse response"
+        Just o -> do
+          let tran = NL.lexsToJoin o
+          putStrLn "Parsed"
+          US.uprint tran
+          case tran of
+            Nothing -> do
+              err <- BL.hGetContents herr
+              putStrLn "Error:"
+              BL.putStrLn err
+            Just appl -> do
+              let appl2 = repeatPass NL.joinPass appl
+              US.uprint appl2
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
   waitForProcess pid
