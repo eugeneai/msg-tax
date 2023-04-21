@@ -294,7 +294,7 @@ data GRAM = BAD
   | CURRENCY | WORD | PUNCTUATION | UNKNOWN
   | JOIN
   | AdjNoun | NumrNoun | SubjVerb | NounNounGent | Percent
-  | PhoneNumber
+  | PhoneNumber | VerbTranObjAccs
   | JOIN3
   | ForJoin | NounInNoun
   deriving (Show, Read, Ord, Eq)
@@ -329,7 +329,7 @@ grams = M.fromList [
                         , NUMBER_YEAR, TIME, FRACNUMBER, NUMBER
                         , CURRENCY, WORD, PUNCTUATION, UNKNOWN])
   , (JOIN, Set.fromList [AdjNoun, SubjVerb, NounNounGent, Percent
-                        , PhoneNumber, NumrNoun ])
+                        , PhoneNumber, NumrNoun, VerbTranObjAccs ])
   , (JOIN3, Set.fromList [ForJoin, NounInNoun])
   ]
 
@@ -343,6 +343,7 @@ instance Rule GRAM where
   join AdjNoun = (adjNounConsist, isAdj, isNoun, False)
   join NumrNoun = (numrNounConsist, isNumr, isNoun, True)
   join SubjVerb = (subjVerbConsist, isSubj, isVerb, False)
+  join VerbTranObjAccs = (isAnyRel, isVerbTran, isObjAccs, True)
   join NounNounGent = (isAnyRel, isNoun, isNounGent, False)
   join Percent = (isAnyRel, isNum100, isPercent, False)
   join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber, False)
@@ -372,28 +373,29 @@ compPairs (left, right) as bs rev = if rev
   where
     rc = scoreSort $ [ (calcS aa' bb', aa', bb') |
                         aa <- taken as,
-                        aa' <- [getParJ LeftSide aa],
+                        aa' <- getParJ LeftSide aa,
                         left aa',
                         bb <- taken bs,
 
-                        bb' <- [getParJ RightSide bb],
+                        bb' <- getParJ RightSide bb,
                         right bb',
                         calcS aa' bb' >= minimumScore]
 
     revrc = scoreSort $ [ (calcS aa' bb', aa', bb') |
                         aa <- taken bs,
-                        aa' <- [getParJ LeftSide aa],
+                        aa' <- getParJ LeftSide aa,
                         left aa',
                         bb <- taken as,
-                        bb' <- [getParJ RightSide bb],
+                        bb' <- getParJ RightSide bb,
                         right bb',
                         calcS aa' bb' >= minimumScore]
     g (_, b', c') = (b',c')
 
-    getParJ :: RelSide -> Join -> Join
-    getParJ LeftSide (J _ aj _ _) = getParJ LeftSide aj
-    getParJ RightSide (J _ _ bj _) = getParJ RightSide bj
-    getParJ _ pos = pos
+    getParJ :: RelSide -> Join -> [Join]
+    -- getParJ LeftSide (J _ aj _ _) = getParJ LeftSide aj
+    -- getParJ RightSide (J _ _ bj _) = getParJ RightSide bj
+    getParJ s (J _ aj bj _) = getParJ s aj ++ getParJ s bj
+    getParJ _ pos = [pos]
 
     calcS :: Join -> Join -> Float
     calcS j1 j2 = (sco j1) * (sco j2)
@@ -412,8 +414,14 @@ isVerb :: Join -> Bool
 isVerb (P VERB _ _) = True
 isVerb _ = False
 
+isVerbTran :: Join -> Bool
+isVerbTran (P VERB _ m) = lexTest[TRAN] m
+isVerbTran _ = False
+
 isSubj :: Join -> Bool
 isSubj v = isNounNomn v || isPronoun v
+
+isObjAccs v = (isNoun v || isPronoun v) && isAccs v
 
 isNounNomn :: Join -> Bool
 isNounNomn n = isNoun n && isNomn n
@@ -435,6 +443,10 @@ isGent _ = False
 isLoct :: Join -> Bool
 isLoct (P pos _ m) = lexTest [LOCT] m
 isLoct _ = False
+
+isAccs :: Join -> Bool
+isAccs (P pos _ m) = lexTest [ACCS] m
+isAccs _ = False
 
 isNoun :: Join -> Bool
 isNoun (P NOUN  _ _) = True
