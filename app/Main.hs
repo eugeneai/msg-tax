@@ -39,25 +39,24 @@ processText str = do
      std_in = CreatePipe,
      std_err = CreatePipe}
   hSetEncoding hin utf8
-  -- hSetEncoding hout utf8
+  hSetEncoding hout utf8
   -- hSetEncoding herr utf8
   -- js <- BL.hGetContents hout
   -- jse <- BL.hGetContents herr
-  -- hPutStrLn hin $ "WORD Мама мыла"
-  hPutStrLn hin $ "WORD There is"
+  hPutStrLn hin $ "WORD Мама мыла раму"
+  -- hPutStrLn hin $ "WORD There is"
   hFlush hin
   js <- inputJSON hout
   US.uprint js
+  putStrLn ("\n-----------\n")
   let obj = NL.translateLexs js
-  -- US.uprint obj
-  -- BL.putStrLn $ js
+  US.uprint obj
   case obj of
         Nothing -> do
           putStrLn "Error: cannot parse response"
         Just o -> do
           let tran = NL.lexsToJoin o
-          putStrLn "Parsed"
-          US.uprint tran
+          -- US.uprint tran
           case tran of
             Nothing -> do
               err <- BL.hGetContents herr
@@ -65,6 +64,7 @@ processText str = do
               BL.putStrLn err
             Just appl -> do
               let appl2 = repeatPass NL.joinPass appl
+              putStrLn ("\n-----------\n")
               US.uprint appl2
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
