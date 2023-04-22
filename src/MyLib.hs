@@ -26,24 +26,6 @@ module MyLib (
   , version) where
 
 import Prelude.Compat
-    ( otherwise,
-      map,
-      ($),
-      Eq((==)),
-      Ord((<=), compare),
-      Read,
-      Show(show),
-      Bool(..),
-      String,
-      Float,
-      Int,
-      Maybe(..),
-      (.),
-      (<$>),
-      (<*>),
-      all,
-      (||),
-      (&&) )
 -- import BasePrelude (intercalate)
 import qualified Data.List as L
 import qualified Data.Set as Set
@@ -184,14 +166,21 @@ data Join = W -- Wall
           | J GRAM Gram Float
           deriving (Eq, Show)
 
-recognize :: [[Join]] -> [Lex] -> Maybe [[Join]]
-recognize prev lexs = Just prev
+recognize :: [[Join]] -> [Lex] -> [[Join]]
+recognize prev lexs = [[j] |
+                       prevJoin <- prev,
+                       currLex <- lexs,
+                       currGram <- lexGrams currLex :: [Gram],
+                       let j = merge prevJoin currGram]
+  where
+    lexGrams :: Lex -> [Gram]
+    lexGrams lex = [G aGram (w lex) W m |
+                  m <- morph lex,
+                  aGram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)) :: [GRAM],
+                  let grams = tag m
+                  in lexTest[aGram] m]
 
--- instance Show Join where
---   show (J g a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
---     where
---       tails = show a ++ " " ++ show b
-
+    merge rigthJoin gram = W
 
 -- lexsToJoin [] = W
 -- lexsToJoin (lex:lexs) = lext lex prev

@@ -49,7 +49,7 @@ subProcess = do
   return $ Proc hin hout herr pid
 
 
-processString :: ProcessData -> [[NL.Join]] -> String -> IO (Maybe [[NL.Join]])
+processString :: ProcessData -> [[NL.Join]] -> String -> IO ([[NL.Join]])
 processString (Proc hin hout herr ph) prev str = do
   hPutStrLn hin $ "WORD " ++ str
   hFlush hin
@@ -58,13 +58,11 @@ processString (Proc hin hout herr ph) prev str = do
   let obj = NL.translateLexs js
   -- US.uprint obj
   case obj of
-    Nothing -> return (Nothing)
+    Nothing -> return (prev)
     Just o -> do
-      let tran = NL.recognize prev o
+      let tran = NL.recognize prev o :: [[NL.Join]]
       -- US.uprint tran
-      case tran of
-        Nothing -> return (Nothing)
-        rc -> return rc
+      return tran
 
 processTerminate :: ProcessData -> IO ()
 processTerminate (Proc hin hout herr ph) = do
@@ -103,4 +101,5 @@ main = do
     pyproc <- subProcess
     j <- processString pyproc [[NL.W]] $ str
     US.uprint j
+    processTerminate pyproc
     else putStrLn "Wrong arguments"
