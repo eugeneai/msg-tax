@@ -28,9 +28,14 @@ inputJSON hout = do
       return js
 
 
+data ProcessData = Proc {
+  hin :: Handle,
+  hout :: Handle,
+  herr :: Handle,
+  ph :: ProcessHandle }
 
-processText :: T.Text -> IO () --  Maybe NL.Join
-processText str = do
+subProcess :: IO (ProcessData)
+subProcess = do
   (Just hin, Just hout, Just herr, pid) <- createProcess
     -- (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
     (proc "/home/eugeneai/.pyenv/shims/python" ["app/tokenizer.py", "-p"])
@@ -40,27 +45,32 @@ processText str = do
      std_err = CreatePipe}
   hSetEncoding hin utf8
   hSetEncoding hout utf8
-  -- hSetEncoding herr utf8
-  -- js <- BL.hGetContents hout
-  -- jse <- BL.hGetContents herr
-  hPutStrLn hin $ "WORD Мама мыла раму."
-  -- hPutStrLn hin $ "WORD There is"
-  -- hPutStrLn hin $ "WORD There"
+  hSetEncoding herr utf8
+  return $ Proc hin hout herr pid
+
+
+processString :: ProcessData -> [[NL.Join]] -> String -> IO (Maybe [[NL.Join]])
+processString (Proc hin hout herr ph) prev str = do
+  hPutStrLn hin $ "WORD " ++ str
   hFlush hin
   js <- inputJSON hout
-  US.uprint js
-  putStrLn ("\n-----------\n")
+  -- US.uprint js
   let obj = NL.translateLexs js
-  US.uprint obj
+  -- US.uprint obj
   case obj of
-    Nothing -> do
-      putStrLn "Error: cannot parse response"
+    Nothing -> return (Nothing)
     Just o -> do
-      let tran = NL.recognize o
-      US.uprint tran
+      let tran = NL.recognize prev o
+      -- US.uprint tran
+      case tran of
+        Nothing -> return (Nothing)
+        rc -> return rc
+
+processTerminate :: ProcessData -> IO ()
+processTerminate (Proc hin hout herr ph) = do
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
-  waitForProcess pid
+  waitForProcess ph
   hClose hin
 
 
@@ -90,5 +100,7 @@ main = do
   if elem "-t" args then do stdinProc
     else if elem "-s" args then do
     let str = unwords . tail . L.takeWhile (/="-t") $ args
-    processText . T.pack $ str
+    pyproc <- subProcess
+    j <- processString pyproc [[NL.W]] $ str
+    US.uprint j
     else putStrLn "Wrong arguments"

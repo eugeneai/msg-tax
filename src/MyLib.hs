@@ -184,8 +184,8 @@ data Join = W -- Wall
           | J GRAM Gram Float
           deriving (Eq, Show)
 
-recognize :: [Lex] -> [[Join]]
-recognize lexs = [[W]]
+recognize :: [[Join]] -> [Lex] -> Maybe [[Join]]
+recognize prev lexs = Just prev
 
 -- instance Show Join where
 --   show (J g a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
