@@ -56,7 +56,8 @@ processString (Proc hin hout herr ph) prev str = do
   js <- inputJSON hout
   -- US.uprint js
   let obj = NL.translateLexs js
-  -- US.uprint obj
+  US.uprint obj
+  putStrLn "\n-------------\n"
   case obj of
     Nothing -> return (prev)
     Just o -> do

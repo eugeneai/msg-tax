@@ -167,45 +167,40 @@ data Join = W -- Wall
           deriving (Eq, Show)
 
 recognize :: [[Join]] -> [Lex] -> [[Join]]
-recognize prev lexs = [[j] |
+recognize prev lexs = [j |
                        prevJoin <- prev,
                        currLex <- lexs,
-                       currGram <- lexGrams currLex :: [Gram],
-                       let j = merge prevJoin currGram]
+                       currGram <- (lexGrams currLex :: [Gram]),
+                       j <- (merge prevJoin currGram :: [[Join]])]
   where
     lexGrams :: Lex -> [Gram]
     lexGrams lex = [G aGram (w lex) W m |
-                  m <- morph lex,
-                  aGram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)) :: [GRAM],
-                  let grams = tag m
-                  in lexTest[aGram] m]
+                    m <- morph lex,
+                    aGram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)) :: [GRAM],
+                    let grams = tag m
+                    in lexTest[aGram] m]
 
-    merge rigthJoin gram = W
+    merge :: [Join] -> Gram -> [[Join]]
+    merge [] (G gram w _ m) = [[J NONE (G gram w wall m) (score m), wall]]
+      where
+        wall = W
+    merge [wall] (G gram w _ m)
+      | wall == W = [[J NONE (G gram w wall m) (score m), wall]]
 
--- lexsToJoin [] = W
--- lexsToJoin (lex:lexs) = lext lex prev
---   where
---     prev = lexsToJoin lexs
---     lext lex prev =
---       let rc = go lex
---       in if L.null rc then [J (ucto lex) (w lex) W (Morph (w lex) Set.empty 1.0)]
---          else rc
+    merge (j:js) gr =
+      let (J jgram gram' sco) = j
+          (G ggram w W m) = gr
+          -- mjs = merge js gr
+      in
+        let joins = grammar j gr
+        in
+          [(j:js) ++ js | h <- joins]
 
---     go l = [ P gram (w l) (conv gram m) |
---              gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
---              m <- (morphs l),
---              lexTest [gram] m]
+    grammar :: Join -> Gram -> [Join]
+    grammar j (G gram w _ m) =
+      let (J jgram gram' jsc) = j
+      in [J NONE (G gram w j m) (jsc * (score m))]
 
---     conv gram m =
---       let (Morph w ts score) = m
---       in (Morph w (Set.delete gram ts) score)
---     morphs l = case morph l of
---                Nothing -> []
---                Just m -> m
-
--- toJoin :: Maybe Message -> Maybe [[Join]]
--- toJoin Nothing = Nothing
--- toJoin (Just msg) = lexsToJoin . text $ msg
 
 class Rule r where
   join :: r -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)

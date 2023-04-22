@@ -20,4 +20,5 @@ repl: build
 
 
 sent: build
-	cabal v2-run msg-tax -- -s "Мама мыла раму."
+	cabal v2-run msg-tax -- -s "Стали"
+	# cabal v2-run msg-tax -- -s "Мама мыла раму."
