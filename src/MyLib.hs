@@ -18,39 +18,32 @@ module MyLib (
   -- , lexsToJoin
   -- , joinPass
   , recognize
-  , GRAM (AdjNoun, SubjVerb, NounNounGent)
-  , Join
+  , GRAM (..)
+  , Join (..)
+  , Gram (..)
   , join
   , text
   , version) where
 
 import Prelude.Compat
-    -- (
-    --   Show
-    --   -- Applicative((<*>)),
-    -- , String
-    -- , Maybe
-    -- , Maybe (Nothing)
-    -- , Maybe (Just)
-    --   -- IO,
-    --   --- (<$>),
-    -- , ($)
-    -- , (.)
-    -- , map
-    -- , concatMap
-    -- , maybe
-    -- , show
-    -- , (++)
-    -- , otherwise
-    -- , Bool
-    -- , Bool (False)
-    -- , Bool (True)
-    -- , all
-    -- , any
-    -- , (&&)
-    -- , (||)
-    --   -- FilePath
-    -- )
+    ( otherwise,
+      map,
+      ($),
+      Eq((==)),
+      Ord((<=), compare),
+      Read,
+      Show(show),
+      Bool(..),
+      String,
+      Float,
+      Int,
+      Maybe(..),
+      (.),
+      (<$>),
+      (<*>),
+      all,
+      (||),
+      (&&) )
 -- import BasePrelude (intercalate)
 import qualified Data.List as L
 import qualified Data.Set as Set
@@ -65,9 +58,17 @@ import GHC.Generics (Generic)
 -- import System.IO
 -- import System.IO ( print, IO, putStrLn, FilePath )
 import Data.Aeson
+    ( Value(String, Object),
+      FromJSON(parseJSON),
+      ToJSON(toJSON),
+      decode,
+      (.:) )
 -- import Data.Aeson.Types
 -- import Data.Text
 -- import qualified Text.Show.Unicode as US
+import Data.Aeson.Types (
+  Parser,
+  Array)
 
 data Subject = Subject {
   name:: T.Text,
@@ -81,9 +82,9 @@ data Subject = Subject {
 
 data Morph = Morph {
     norm:: T.Text
-  , tag:: Set.Set GRAM
+  , tag:: [GRAM]
   , score:: Float
-  } deriving (Show, Generic, Eq)
+  } deriving (Show, Eq, Generic)
 
 data Lex = Lex {
     w:: T.Text
@@ -103,18 +104,18 @@ instance FromJSON Lex
 
 instance FromJSON Morph
 
--- instance (Ord g, FromJSON g) => FromJSON (Set.Set g) where
---   parseJSON (Array v) = CA.pure $ myUnpack . V.toList $ v
---     where
---       myUnpack :: [Value] -> Set.Set g
---       myUnpack values = Set.fromList $ concatMap val values
---       val :: Value -> [GRAM]
---       val (String s) = [readGram s]
---       val (Array a) = concatMap val . V.toList $ a
---       val _ = [BAD]
---   parseJSON _ = CA.empty
+-- toTagSet :: Parser Morph -> Set.Set GRAM
+-- toTagSet (Parser m) = myUnpack m
+--   where
+--     -- myUnpack :: [Value] -> Set.Set g
+--     myUnpack values = Set.fromList $ concatMap val values
+--     -- val :: Value -> [GRAM]
+--     val (String s) = [readGram s]
+--     -- val val = concatMap val . V.toList $ a
+--     -- val _ = [BAD]
 
 instance FromJSON GRAM where
+  parseJSON :: Value -> Parser GRAM
   parseJSON (String s) = CA.pure $ readGram s
   parseJSON _ = CA.empty
 
@@ -185,9 +186,10 @@ data Gram = G GRAM
           deriving (Eq, Show)
 
 data Join = W -- Wall
-          | J GRAM Gram Float Bool
+          | J GRAM Gram Float
           deriving (Eq, Show)
 
+recognize :: [Lex] -> [[Join]]
 recognize lexs = [[W]]
 
 -- instance Show Join where
@@ -301,6 +303,7 @@ grams = M.fromList [
 
 instance Rule GRAM where
 
+  join :: GRAM -> (Gram -> Gram -> Bool, Gram -> Bool, Gram -> Bool)
   join AdjNoun = (adjNounConsist, isAdj, isNoun)
   join NumrNoun = (numrNounConsist, isNumr, isNoun)
   join SubjVerb = (subjVerbConsist, isSubj, isVerb)
@@ -312,6 +315,7 @@ instance Rule GRAM where
     where lf _ = False
           lfm _ _ = False
 
+  join3 :: (GRAM, String) -> (Gram -> Gram -> Bool, Gram -> Bool, Gram -> Bool)
   join3 (ForJoin, "для") = (isAnyRel, isNoun, isNounGent)
   join3 (NounInNoun, "в") = (isAnyRel, isNoun, isNounLoct)
   join3 _ = (lfm, lf, lf)
@@ -331,7 +335,7 @@ lexTest [] _ = True
 lexTest sub morph = rc
   where
     ts = tag morph
-    rc = all (\e -> Set.member e ts) sub
+    rc = all (\e -> L.elem e ts) sub
 
 isVerb :: Gram -> Bool
 isVerb (G VERB _ _ _) = True
@@ -344,6 +348,7 @@ isVerbTran _ = False
 isSubj :: Gram -> Bool
 isSubj v = isNounNomn v || isPronoun v
 
+isObjAccs :: Gram -> Bool
 isObjAccs v = (isNoun v || isPronoun v) && isAccs v
 
 isNounNomn :: Gram -> Bool
@@ -357,19 +362,15 @@ isNounLoct n = isNoun n && isLoct n
 
 isNomn :: Gram -> Bool
 isNomn (G pos _ _ m) = lexTest [NOMN] m
-isNomn _ = False
 
 isGent :: Gram -> Bool
 isGent (G pos _ _ m) = lexTest [GENT] m
-isGent _ = False
 
 isLoct :: Gram -> Bool
 isLoct (G pos _ _ m) = lexTest [LOCT] m
-isLoct _ = False
 
 isAccs :: Gram -> Bool
 isAccs (G pos _ _ m) = lexTest [ACCS] m
-isAccs _ = False
 
 isNoun :: Gram -> Bool
 isNoun (G NOUN _ _ _) = True
@@ -379,6 +380,7 @@ isAdj:: Gram -> Bool
 isAdj (G ADJF _ _ _) = True
 isAdj _ = False
 
+isNumr :: Gram -> Bool
 isNumr (G NUMR _ _ _) = True
 isNumr _ =False
 
@@ -389,10 +391,11 @@ isNum100 (G NUMBER w _ _) =
     Just n -> n <= 100
 isNum100 _ = False
 
+isNumber :: Gram -> Bool
 isNumber (G NUMBER w _ _) =
   case (TR.readMaybe (T.unpack w))::Maybe Int of
     Nothing -> False
-    Just n -> True
+    Just _ -> True
 isNumber _ = False
 
 isPhoneNumber :: Gram -> Bool
@@ -400,7 +403,6 @@ isPhoneNumber l = isNumber l && hasLength 11 l
 
 hasLength :: Int -> Gram -> Bool
 hasLength l (G _ w _ _) = T.length w == l
-hasLength _ _ = False
 
 isPercent :: Gram -> Bool
 isPercent (G PUNCTUATION percent _ _) = percent == T.pack "%"
@@ -408,7 +410,6 @@ isPercent _ = False
 
 isWord :: String -> Gram -> Bool
 isWord word (G _ w _ _ ) = w == T.pack word
-isWord _ _ = False
 
 
 adjNounConsist :: Gram -> Gram -> Bool
@@ -426,8 +427,8 @@ getProp [cls] m =
   case set of
     Nothing -> Set.empty
     Just s ->
-      let f e = Set.member e s
-      in Set.filter f $ tag $ m
+      let f e = L.elem e s
+      in Set.fromList $ L.filter f . tag $ m
   where
     set = M.lookup cls grams
 
