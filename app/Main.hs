@@ -45,6 +45,7 @@ processText str = do
   -- jse <- BL.hGetContents herr
   hPutStrLn hin $ "WORD Мама мыла раму."
   -- hPutStrLn hin $ "WORD There is"
+  -- hPutStrLn hin $ "WORD There"
   hFlush hin
   js <- inputJSON hout
   US.uprint js

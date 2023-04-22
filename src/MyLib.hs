@@ -75,14 +75,9 @@ data Subject = Subject {
   tax:: T.Text
   } deriving (Show, Generic)
 
--- instance Show g => Show (Set.Set g) where
---   show s
---     | Set.null s = "*"
---     | otherwise = show . Set.toList $ s
-
 data Morph = Morph {
     norm:: T.Text
-  , tag:: [GRAM]
+  , tag:: Set.Set GRAM
   , score:: Float
   } deriving (Show, Eq, Generic)
 
@@ -427,8 +422,8 @@ getProp [cls] m =
   case set of
     Nothing -> Set.empty
     Just s ->
-      let f e = L.elem e s
-      in Set.fromList $ L.filter f . tag $ m
+      let f e = Set.member e s
+      in Set.filter f . tag $ m
   where
     set = M.lookup cls grams
 

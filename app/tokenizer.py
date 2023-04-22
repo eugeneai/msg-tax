@@ -83,7 +83,7 @@ def morphy(tok):
         mln = []
         for ttt in ml:
             if " " in ttt:
-                mln.append([_.lower() for _ in ttt.split()])
+                mln += ([_.lower() for _ in ttt.split()])
             else:
                 mln.append(ttt.lower())
         d = {"norm": f.normal_form, "tag": mln, "score": f.score}
@@ -104,10 +104,10 @@ def tokenize(t):
         s = str(tok)
         tt = tok.tokentype
         o = {"w": s, "ucto": tt.lower()}
+        m = []
         if tt in ["WORD", "WORD-COMPOUND"]:
-            o["morph"] = morphy(tok)
-        else:
-            o["morph"] = []
+            m = morphy(tok)
+        o["morph"] = m
         toks.append(o)
 
     return toks
