@@ -10,10 +10,10 @@ import System.Environment
 import System.Process
 import System.IO
 
-repeatPass p appl =
-  let a2 = p appl in
-    if a2 /= appl then repeatPass p a2
-    else a2
+-- repeatPass p appl =
+--   let a2 = p appl in
+--     if a2 /= appl then repeatPass p a2
+--     else a2
 
 
 inputJSON :: Handle -> IO BL.ByteString
@@ -43,7 +43,7 @@ processText str = do
   -- hSetEncoding herr utf8
   -- js <- BL.hGetContents hout
   -- jse <- BL.hGetContents herr
-  hPutStrLn hin $ "WORD Мама мыла раму"
+  hPutStrLn hin $ "WORD Мама мыла раму."
   -- hPutStrLn hin $ "WORD There is"
   hFlush hin
   js <- inputJSON hout
@@ -51,21 +51,21 @@ processText str = do
   putStrLn ("\n-----------\n")
   let obj = NL.translateLexs js
   US.uprint obj
-  case obj of
-        Nothing -> do
-          putStrLn "Error: cannot parse response"
-        Just o -> do
-          let tran = NL.lexsToJoin o
-          -- US.uprint tran
-          case tran of
-            Nothing -> do
-              err <- BL.hGetContents herr
-              putStrLn "Error:"
-              BL.putStrLn err
-            Just appl -> do
-              let appl2 = repeatPass NL.joinPass appl
-              putStrLn ("\n-----------\n")
-              US.uprint appl2
+  -- case obj of
+  --       Nothing -> do
+  --         putStrLn "Error: cannot parse response"
+  --       Just o -> do
+  --         let tran = NL.lexsToJoin o
+  --         -- US.uprint tran
+  --         case tran of
+  --           Nothing -> do
+  --             err <- BL.hGetContents herr
+  --             putStrLn "Error:"
+  --             BL.putStrLn err
+  --           Just appl -> do
+  --             let appl2 = repeatPass NL.joinPass appl
+  --             putStrLn ("\n-----------\n")
+  --             US.uprint appl2
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
   waitForProcess pid
@@ -78,18 +78,19 @@ stdinProc = do
   js <- BL.getContents
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
+  US.uprint "OK"
 --  US.uprint obj
 --  putStrLn "\n\n"
-  US.uprint . NL.toText $ obj
-  putStrLn "\n\n"
-  US.uprint . NL.toNorm $ obj
-  putStrLn "\n-------------\n"
-  let tran = NL.toJoin obj
-  case tran of
-    Nothing -> print "No parse"
-    Just appl -> do
-      let appl2 = repeatPass NL.joinPass appl
-      US.uprint appl2
+--  US.uprint . NL.toText $ obj
+  -- putStrLn "\n\n"
+  -- US.uprint . NL.toNorm $ obj
+  -- putStrLn "\n-------------\n"
+  -- let tran = NL.toJoin obj
+  -- case tran of
+  --   Nothing -> print "No parse"
+  --   Just appl -> do
+  --     let appl2 = repeatPass NL.joinPass appl
+  --     US.uprint appl2
 
 main :: IO ()
 main = do

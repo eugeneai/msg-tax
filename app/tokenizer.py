@@ -106,6 +106,8 @@ def tokenize(t):
         o = {"w": s, "ucto": tt.lower()}
         if tt in ["WORD", "WORD-COMPOUND"]:
             o["morph"] = morphy(tok)
+        else:
+            o["morph"] = []
         toks.append(o)
 
     return toks

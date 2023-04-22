@@ -11,12 +11,12 @@ module MyLib (
   , Message
   , translateContent
   , translateLexs
-  , toText
-  , toNorm
-  , convertMsg
-  , toJoin
-  , lexsToJoin
-  , joinPass
+  -- , toText
+  -- , toNorm
+  -- , convertMsg
+  -- , toJoin
+  -- , lexsToJoin
+  -- , joinPass
   , GRAM (AdjNoun, SubjVerb, NounNounGent)
   , Join
   , join
@@ -73,29 +73,26 @@ data Subject = Subject {
   tax:: T.Text
   } deriving (Show, Generic)
 
-newtype TagSet = TagSet (Set.Set GRAM)
-  deriving (Eq)
-
-instance Show TagSet where
-  show (TagSet s)
-    | Set.null s = "*"
-    | otherwise = show . Set.toList $ s
+-- instance Show g => Show (Set.Set g) where
+--   show s
+--     | Set.null s = "*"
+--     | otherwise = show . Set.toList $ s
 
 data Morph = Morph {
     norm:: T.Text
-  , tag:: TagSet
+  , tag:: Set.Set GRAM
   , score:: Float
   } deriving (Show, Generic, Eq)
 
 data Lex = Lex {
     w:: T.Text
   , ucto:: GRAM
-  , morph:: Maybe [Morph]
+  , morph:: [Morph]
   } deriving (Show, Generic)
 
 data Message = Message {
-    text:: [Lex]
-  , subjects:: (Maybe [Subject])
+  text:: [Lex]
+  , subjects:: [Subject]
   } deriving (Show, Generic)
 
 
@@ -105,16 +102,16 @@ instance FromJSON Lex
 
 instance FromJSON Morph
 
-instance FromJSON TagSet where
-  parseJSON (Array v) = CA.pure . TagSet $ myUnpack . V.toList $ v
-    where
-      myUnpack :: [Value] -> Set.Set GRAM
-      myUnpack values = Set.fromList $ concatMap val values
-      val :: Value -> [GRAM]
-      val (String s) = [readGram s]
-      val (Array a) = concatMap val . V.toList $ a
-      val _ = [BAD]
-  parseJSON _ = CA.empty
+-- instance (Ord g, FromJSON g) => FromJSON (Set.Set g) where
+--   parseJSON (Array v) = CA.pure $ myUnpack . V.toList $ v
+--     where
+--       myUnpack :: [Value] -> Set.Set g
+--       myUnpack values = Set.fromList $ concatMap val values
+--       val :: Value -> [GRAM]
+--       val (String s) = [readGram s]
+--       val (Array a) = concatMap val . V.toList $ a
+--       val _ = [BAD]
+--   parseJSON _ = CA.empty
 
 instance FromJSON GRAM where
   parseJSON (String s) = CA.pure $ readGram s
@@ -137,11 +134,10 @@ instance ToJSON Message
 instance ToJSON Lex
 instance ToJSON Morph
 
-instance ToJSON TagSet where
-  toJSON :: TagSet -> Value
-  toJSON (TagSet s) = Array . V.fromList . map f . Set.toList $ s
-    where
-      f gram = String . T.pack . show $ gram
+-- instance ToJSON (Set.Set GRAM) where
+--   toJSON s = Array . V.fromList . map f . Set.toList $ s
+--     where
+--       f gram = String . T.pack . show $ gram
 
 
 instance ToJSON GRAM where
@@ -161,19 +157,18 @@ translateLexs content = do
 defNoParse :: T.Text
 defNoParse = (T.pack "Error: no parse")
 
-toText :: Maybe Message -> T.Text
-toText = convertMsg defNoParse w
+-- toText :: Maybe Message -> T.Text
+-- toText = convertMsg defNoParse w
 
-toNorm :: Maybe Message -> T.Text
-toNorm = convertMsg defNoParse c
-  where
-    c lex = case morph lex of
-      Nothing -> w lex
-      Just morphs -> go morphs
-    go :: [Morph] -> T.Text
-    go xs = T.intercalate "/" . map gonorm $ xs :: T.Text
-    gonorm :: Morph -> T.Text
-    gonorm = norm
+-- toNorm :: Maybe Message -> T.Text
+-- toNorm = convertMsg defNoParse c
+--   where
+--     c lex = go morphs
+--     morphs = morph lex
+--     go :: [Morph] -> T.Text
+--     go xs = T.intercalate "/" . map gonorm $ xs :: T.Text
+--     gonorm :: Morph -> T.Text
+--     gonorm = norm
 
 convertMsg :: T.Text -> (Lex -> T.Text) -> Maybe Message -> T.Text
 convertMsg def _ Nothing = def
@@ -182,89 +177,52 @@ convertMsg _ c (Just msg) = T.intercalate (T.pack " ") . map c $ text msg
 version :: String
 version = "0.0.1"
 
--- data Ucto =
---   deriving (Show, Eq, Read)
+data Gram = G GRAM
+            T.Text
+            Join   -- reference to the main grammeme
+            Morph  -- Morpheme
+          deriving (Eq, Show)
 
-data Join = J GRAM Join Join Float
-          | P GRAM T.Text Morph
-          deriving (Eq)
+data Join = W -- Wall
+          | J GRAM Gram Float Bool
+          deriving (Eq, Show)
 
-instance Show Join where
-  show (J c a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
-    where
-      tails = show a ++ " " ++ show b
-  show (P u w ts) = "<" ++ show u ++ "> " ++ show w ++ " / " ++ show ts ++ "\n"
-
-
-lexsToJoin lexs = Just . map lext $ lexs
-  where
-    lext lex =
-      let rc = go lex
-      in if L.null rc then [P (ucto lex) (w lex) (Morph (w lex) (TagSet Set.empty) 1.0)]
-         else rc
-
-    go l = [ P gram (w l) (conv gram m) |
-             gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
-             m <- (morphs l),
-             lexTest [gram] m]
-
-    conv gram m =
-      let (Morph w (TagSet ts) score) = m
-      in (Morph w (TagSet (Set.delete gram ts)) score)
-    morphs l = case morph l of
-               Nothing -> []
-               Just m -> m
+-- instance Show Join where
+--   show (J g a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
+--     where
+--       tails = show a ++ " " ++ show b
 
 
-toJoin :: Maybe Message -> Maybe [[Join]]
-toJoin Nothing = Nothing
-toJoin (Just msg) = lexsToJoin . text $ msg
+-- lexsToJoin [] = W
+-- lexsToJoin (lex:lexs) = lext lex prev
+--   where
+--     prev = lexsToJoin lexs
+--     lext lex prev =
+--       let rc = go lex
+--       in if L.null rc then [J (ucto lex) (w lex) W (Morph (w lex) Set.empty 1.0)]
+--          else rc
+
+--     go l = [ P gram (w l) (conv gram m) |
+--              gram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)),
+--              m <- (morphs l),
+--              lexTest [gram] m]
+
+--     conv gram m =
+--       let (Morph w ts score) = m
+--       in (Morph w (Set.delete gram ts) score)
+--     morphs l = case morph l of
+--                Nothing -> []
+--                Just m -> m
+
+-- toJoin :: Maybe Message -> Maybe [[Join]]
+-- toJoin Nothing = Nothing
+-- toJoin (Just msg) = lexsToJoin . text $ msg
 
 class Rule r where
-  join :: r -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
-  join3 :: (r, String) -> (Join->Join->Bool, Join->Bool, Join->Bool, Bool)
+  join :: r -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)
+  join3 :: (r, String) -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)
 
-joinPass :: [[Join]] -> [[Join]]
-joinPass l = applyRule l
-
-applyRule :: [[Join]] -> [[Join]]
-applyRule [] = []
-applyRule [e] = [e]
-applyRule (as:word:bs:l) = rc
-  where
-    lm = [ (score, ma, mb, r) |
-           (P _ word' _) <- word,
-           r <- rules,
-           (mjoin, left, right, rev) <- [join3 (r, T.unpack word')],
-           (score, ma, mb) <- scoreSort $ compPairs (left, right) as bs rev,
-           mjoin ma mb ]
-
-    rules = maybe [] (Set.toList) (M.lookup JOIN3 grams)
-    nj = map red . L.take topN $ lm
-    rc = if null lm then (applyRule2 (as:word:bs:l))
-         else applyRule (nj:l)
-    red :: (Float, Join, Join, GRAM) -> Join
-    red (s, a, b, r) = J r a b s
-applyRule (as:bs:[]) = applyRule2 (as:bs:[])
-
-applyRule2 :: [[Join]] -> [[Join]]
-applyRule2 (as:bs:l) = rc
-  where
-    lm = [ (score, ma, mb, r) |
-           r <- rules,
-           (mjoin, left, right, rev) <- [join r],
-           (score, ma, mb) <- scoreSort $ compPairs (left, right) as bs rev,
-           mjoin ma mb ]
-
-    rules = maybe [] (Set.toList) (M.lookup JOIN grams)
-    nj = map red . L.take topN $ lm
-    rc = if null lm then as:(applyRule (bs:l))
-         else applyRule (nj:l)
-    red :: (Float, Join, Join, GRAM) -> Join
-    red (s, a, b, r) = J r a b s
-
-
-scoreSort :: [(Float, Join, Join)] -> [(Float, Join, Join)]
+scoreSort :: [(Float, a, a)] -> [(Float, a, a)]
 scoreSort l = L.sortBy f l
   where
     f (a', _, _) (b', _, _) = compare b' a' -- descending
@@ -283,7 +241,8 @@ data GRAM = BAD
   | SLNG  | ARCH  | LITR  | ERRO  | DIST  | QUES  | DMNS  | PRNT  | V_BE  | V_EN
   | V_IE  | V_BI  | FIMP  | PRDX  | COUN  | COLL  | V_SH  | AF_P  | INMX  | VPRE
   | ANPH  | INIT  | ADJX  | HYPO  | LATN  | UNKN
-  | Unrec T.Text -- For all unknown
+  | NONE  -- No reference
+--  | Unrec T.Text -- For all unknown
   | UCTO
   | URL | URL_WWW | URL_DOMAIN -- Ucto
   | E_MAIL | ABBREVIATION_KNOWN | WORD_PARPREFIX
@@ -339,22 +298,20 @@ grams = M.fromList [
 
 instance Rule GRAM where
 
-  join :: GRAM -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool, Bool)
-  join AdjNoun = (adjNounConsist, isAdj, isNoun, False)
-  join NumrNoun = (numrNounConsist, isNumr, isNoun, True)
-  join SubjVerb = (subjVerbConsist, isSubj, isVerb, False)
-  join VerbTranObjAccs = (isAnyRel, isVerbTran, isObjAccs, True)
-  join NounNounGent = (isAnyRel, isNoun, isNounGent, False)
-  join Percent = (isAnyRel, isNum100, isPercent, False)
-  join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber, False)
-  join _ = (lfm, lf, lf, False)
+  join AdjNoun = (adjNounConsist, isAdj, isNoun)
+  join NumrNoun = (numrNounConsist, isNumr, isNoun)
+  join SubjVerb = (subjVerbConsist, isSubj, isVerb)
+  join VerbTranObjAccs = (isAnyRel, isVerbTran, isObjAccs)
+  join NounNounGent = (isAnyRel, isNoun, isNounGent)
+  join Percent = (isAnyRel, isNum100, isPercent)
+  join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber)
+  join _ = (lfm, lf, lf)
     where lf _ = False
           lfm _ _ = False
 
-  join3 :: (GRAM, String) -> (Join -> Join -> Bool, Join -> Bool, Join -> Bool, Bool)
-  join3 (ForJoin, "для") = (isAnyRel, isNoun, isNounGent, False)
-  join3 (NounInNoun, "в") = (isAnyRel, isNoun, isNounLoct, False)
-  join3 _ = (lfm, lf, lf, False)
+  join3 (ForJoin, "для") = (isAnyRel, isNoun, isNounGent)
+  join3 (NounInNoun, "в") = (isAnyRel, isNoun, isNounLoct)
+  join3 _ = (lfm, lf, lf)
     where lf _ = False
           lfm _ _ = False
 
@@ -366,133 +323,96 @@ topN = 20
 data RelSide = LeftSide | RightSide
   deriving (Show, Eq)
 
-compPairs :: (Join->Bool, Join->Bool) -> [Join] -> [Join] -> Bool -> [(Float, Join, Join)]
-compPairs (left, right) as bs rev = if rev
-                                    then L.take topN . scoreSort $ (rc ++ revrc)
-                                    else rc
-  where
-    rc = scoreSort $ [ (calcS aa' bb', aa', bb') |
-                        aa <- taken as,
-                        aa' <- getParJ LeftSide aa,
-                        left aa',
-                        bb <- taken bs,
-
-                        bb' <- getParJ RightSide bb,
-                        right bb',
-                        calcS aa' bb' >= minimumScore]
-
-    revrc = scoreSort $ [ (calcS aa' bb', aa', bb') |
-                        aa <- taken bs,
-                        aa' <- getParJ LeftSide aa,
-                        left aa',
-                        bb <- taken as,
-                        bb' <- getParJ RightSide bb,
-                        right bb',
-                        calcS aa' bb' >= minimumScore]
-    g (_, b', c') = (b',c')
-
-    getParJ :: RelSide -> Join -> [Join]
-    -- getParJ LeftSide (J _ aj _ _) = getParJ LeftSide aj
-    -- getParJ RightSide (J _ _ bj _) = getParJ RightSide bj
-    getParJ s (J _ aj bj _) = getParJ s aj ++ getParJ s bj
-    getParJ _ pos = [pos]
-
-    calcS :: Join -> Join -> Float
-    calcS j1 j2 = (sco j1) * (sco j2)
-    sco (P _ _ a1) = score a1
-    sco (J _ a1 b1 s) = s -- (calcS a1 b1)
-    taken = L.take topN
-
 lexTest :: [GRAM] -> Morph -> Bool
 lexTest [] _ = True
 lexTest sub morph = rc
   where
-    TagSet ts = tag morph
+    ts = tag morph
     rc = all (\e -> Set.member e ts) sub
 
-isVerb :: Join -> Bool
-isVerb (P VERB _ _) = True
+isVerb :: Gram -> Bool
+isVerb (G VERB _ _ _) = True
 isVerb _ = False
 
-isVerbTran :: Join -> Bool
-isVerbTran (P VERB _ m) = lexTest[TRAN] m
+isVerbTran :: Gram -> Bool
+isVerbTran (G VERB _ _ m) = lexTest[TRAN] m
 isVerbTran _ = False
 
-isSubj :: Join -> Bool
+isSubj :: Gram -> Bool
 isSubj v = isNounNomn v || isPronoun v
 
 isObjAccs v = (isNoun v || isPronoun v) && isAccs v
 
-isNounNomn :: Join -> Bool
+isNounNomn :: Gram -> Bool
 isNounNomn n = isNoun n && isNomn n
 
-isNounGent :: Join -> Bool
+isNounGent :: Gram -> Bool
 isNounGent n = isNoun n && isGent n
 
-isNounLoct :: Join -> Bool
+isNounLoct :: Gram -> Bool
 isNounLoct n = isNoun n && isLoct n
 
-isNomn :: Join -> Bool
-isNomn (P pos _ m) = lexTest [NOMN] m
+isNomn :: Gram -> Bool
+isNomn (G pos _ _ m) = lexTest [NOMN] m
 isNomn _ = False
 
-isGent :: Join -> Bool
-isGent (P pos _ m) = lexTest [GENT] m
+isGent :: Gram -> Bool
+isGent (G pos _ _ m) = lexTest [GENT] m
 isGent _ = False
 
-isLoct :: Join -> Bool
-isLoct (P pos _ m) = lexTest [LOCT] m
+isLoct :: Gram -> Bool
+isLoct (G pos _ _ m) = lexTest [LOCT] m
 isLoct _ = False
 
-isAccs :: Join -> Bool
-isAccs (P pos _ m) = lexTest [ACCS] m
+isAccs :: Gram -> Bool
+isAccs (G pos _ _ m) = lexTest [ACCS] m
 isAccs _ = False
 
-isNoun :: Join -> Bool
-isNoun (P NOUN  _ _) = True
+isNoun :: Gram -> Bool
+isNoun (G NOUN _ _ _) = True
 isNoun _ = False
 
-isAdj:: Join -> Bool
-isAdj (P ADJF _ _) = True
+isAdj:: Gram -> Bool
+isAdj (G ADJF _ _ _) = True
 isAdj _ = False
 
-isNumr (P NUMR _ _) = True
+isNumr (G NUMR _ _ _) = True
 isNumr _ =False
 
-isNum100 :: Join -> Bool
-isNum100 (P NUMBER w _) =
+isNum100 :: Gram -> Bool
+isNum100 (G NUMBER w _ _) =
   case (TR.readMaybe (T.unpack w))::Maybe Int of
     Nothing -> False
     Just n -> n <= 100
 isNum100 _ = False
 
-isNumber (P NUMBER w _) =
+isNumber (G NUMBER w _ _) =
   case (TR.readMaybe (T.unpack w))::Maybe Int of
     Nothing -> False
     Just n -> True
 isNumber _ = False
 
-isPhoneNumber :: Join -> Bool
+isPhoneNumber :: Gram -> Bool
 isPhoneNumber l = isNumber l && hasLength 11 l
 
-hasLength :: Int -> Join -> Bool
-hasLength l (P _ w _) = T.length w == l
+hasLength :: Int -> Gram -> Bool
+hasLength l (G _ w _ _) = T.length w == l
 hasLength _ _ = False
 
-isPercent :: Join -> Bool
-isPercent (P PUNCTUATION percent _) = percent == T.pack "%"
+isPercent :: Gram -> Bool
+isPercent (G PUNCTUATION percent _ _) = percent == T.pack "%"
 isPercent _ = False
 
-isWord :: String -> Join -> Bool
-isWord word (P _ w _ ) = w == T.pack word
+isWord :: String -> Gram -> Bool
+isWord word (G _ w _ _ ) = w == T.pack word
 isWord _ _ = False
 
 
-adjNounConsist :: Join -> Join -> Bool
+adjNounConsist :: Gram -> Gram -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
 
-numrNounConsist :: Join -> Join -> Bool
-numrNounConsist (P _ _ a) (P _ _ b) = sa =*= sb
+numrNounConsist :: Gram -> Gram -> Bool
+numrNounConsist (G _ _ _ a) (G _ _ _ b) = sa =*= sb
   where
     as = [CASE]
     sa = getProp as a
@@ -504,18 +424,15 @@ getProp [cls] m =
     Nothing -> Set.empty
     Just s ->
       let f e = Set.member e s
-      in Set.filter f $ unTS . tag $ m
+      in Set.filter f $ tag $ m
   where
     set = M.lookup cls grams
 
 getProp [] _ = Set.empty:: Set.Set GRAM
 getProp (a:t) ts = getProp [a] ts `Set.union` getProp t ts
 
-unTS :: TagSet -> Set.Set GRAM
-unTS (TagSet t) = t
-
-sameDeclination :: Join -> Join -> Bool
-sameDeclination (P _ _ a) (P _ _ b) = sa =*= sb
+sameDeclination :: Gram -> Gram -> Bool
+sameDeclination (G _ _ _ a) (G _ _ _ b) = sa =*= sb
   where
     as = [CASE, NMBR]
     sa = getProp as a
@@ -527,13 +444,13 @@ a =*= b = Set.isSubsetOf a b && Set.isSubsetOf b a
 pronouns :: Set.Set GRAM
 pronouns = Set.fromList [PER1, PER2, PER3, NPRO]
 
-isPronoun :: Join -> Bool
-isPronoun (P pr _ _) = Set.member pr pronouns
+isPronoun :: Gram -> Bool
+isPronoun (G pr _ _ _) = Set.member pr pronouns
 isPronoun _ = False
 
-subjVerbConsist :: Join -> Join -> Bool
-subjVerbConsist (P subj wsubj msubj) (P VERB verb mverb)
-  | isPronoun (P subj wsubj msubj) = consistency
+subjVerbConsist :: Gram -> Gram -> Bool
+subjVerbConsist (G subj wsubj j msubj) (G VERB verb _ mverb)
+  | isPronoun (G subj wsubj j msubj) = consistency
   | subj == NOUN = consistency
   | otherwise = False
   where
@@ -545,10 +462,10 @@ subjVerbConsist (P subj wsubj msubj) (P VERB verb mverb)
 
 -- Use it for checking non working relations
 
-isAnyRel :: Join -> Join -> Bool
+isAnyRel :: Gram -> Gram -> Bool
 isAnyRel _ _ = True
 
-isAny :: Join -> Bool
+isAny :: Gram -> Bool
 isAny _ = True
 
 isGram :: GRAM -> Morph -> Bool
