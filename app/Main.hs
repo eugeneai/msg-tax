@@ -51,21 +51,12 @@ processText str = do
   putStrLn ("\n-----------\n")
   let obj = NL.translateLexs js
   US.uprint obj
-  -- case obj of
-  --       Nothing -> do
-  --         putStrLn "Error: cannot parse response"
-  --       Just o -> do
-  --         let tran = NL.lexsToJoin o
-  --         -- US.uprint tran
-  --         case tran of
-  --           Nothing -> do
-  --             err <- BL.hGetContents herr
-  --             putStrLn "Error:"
-  --             BL.putStrLn err
-  --           Just appl -> do
-  --             let appl2 = repeatPass NL.joinPass appl
-  --             putStrLn ("\n-----------\n")
-  --             US.uprint appl2
+  case obj of
+    Nothing -> do
+      putStrLn "Error: cannot parse response"
+    Just o -> do
+      let tran = NL.recognize o
+      US.uprint tran
   BL.hPutStrLn hin . BL.pack $ "QUIT"
   hFlush hin
   waitForProcess pid

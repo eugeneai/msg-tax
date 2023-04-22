@@ -17,6 +17,7 @@ module MyLib (
   -- , toJoin
   -- , lexsToJoin
   -- , joinPass
+  , recognize
   , GRAM (AdjNoun, SubjVerb, NounNounGent)
   , Join
   , join
@@ -186,6 +187,8 @@ data Gram = G GRAM
 data Join = W -- Wall
           | J GRAM Gram Float Bool
           deriving (Eq, Show)
+
+recognize lexs = [[W]]
 
 -- instance Show Join where
 --   show (J g a b s) = "(J " ++ show s ++ " " ++ show c ++ " " ++ tails ++ ")\n"
