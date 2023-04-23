@@ -9,6 +9,8 @@ import Prelude.Compat (id)
 import System.Environment
 import System.Process
 import System.IO
+import MyLib (calcScore)
+import qualified Data.ByteString as US
 
 -- repeatPass p appl =
 --   let a2 = p appl in
@@ -104,6 +106,9 @@ printGrams :: [[NL.Gram]] -> IO ()
 printGrams [] = do
   return ()
 printGrams (grs:rest) = do
+  let sco = NL.calcScore grs
+  US.uprint sco
+  -- putStr ":"
   US.uprint . reverse $ grs
   putStrLn ""
   printGrams rest

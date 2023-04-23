@@ -17,6 +17,7 @@ module MyLib (
   -- , toJoin
   -- , lexsToJoin
   -- , joinPass
+  , calcScore
   , recognize
   , GRAM (..)
   , Join (..)
@@ -26,32 +27,43 @@ module MyLib (
   , version) where
 
 import Prelude.Compat
--- import BasePrelude (intercalate)
+    ( (++),
+      otherwise,
+      map,
+      ($),
+      Eq((==)),
+      Num((*)),
+      Ord((<=), compare),
+      Read,
+      Show(show),
+      Bool(..),
+      String,
+      Float,
+      Int,
+      Maybe(..),
+      all,
+      maybe,
+      (.),
+      (+),
+      (&&),
+      (||) )
+import Data.Ord ( Ord((<=), compare), Ordering(GT, LT) )
 import qualified Data.List as L
 import qualified Data.Set as Set
 import qualified Data.Map.Lazy as M
-import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Text.Read.Compat as TR
 import qualified Control.Applicative as CA
--- import qualified Data.Text.IO as TIO
 import qualified Data.ByteString.Lazy.Char8 as BL
 import GHC.Generics (Generic)
--- import System.IO
--- import System.IO ( print, IO, putStrLn, FilePath )
 import Data.Aeson
     ( Value(String, Object),
       FromJSON(parseJSON),
       ToJSON(toJSON),
       decode,
       (.:) )
--- import Data.Aeson.Types
--- import Data.Text
--- import qualified Text.Show.Unicode as US
 import Data.Aeson.Types (
-  Parser,
-  Array)
-import Data.Char (isPunctuation)
+  Parser)
 
 data Subject = Subject {
   name:: T.Text,
@@ -122,18 +134,6 @@ translateLexs content = do
 defNoParse :: T.Text
 defNoParse = (T.pack "Error: no parse")
 
--- toText :: Maybe Message -> T.Text
--- toText = convertMsg defNoParse w
-
--- toNorm :: Maybe Message -> T.Text
--- toNorm = convertMsg defNoParse c
---   where
---     c lex = go morphs
---     morphs = morph lex
---     go :: [Morph] -> T.Text
---     go xs = T.intercalate "/" . map gonorm $ xs :: T.Text
---     gonorm :: Morph -> T.Text
---     gonorm = norm
 
 convertMsg :: T.Text -> (Lex -> T.Text) -> Maybe Message -> T.Text
 convertMsg def _ Nothing = def
@@ -174,7 +174,7 @@ recognize grams (lex:ls) =
 recognizeOneLex :: [[Gram]] -> Lex -> [[Gram]]
 recognizeOneLex
   prevGrams
-  lex = if L.null rc then nrc else rc
+  lex = L.take 2 $ L.sortBy fscore $ if L.null rc then nrc else rc
   where
     rc = [gram |
            prevGram <- prevGrams,
@@ -184,6 +184,12 @@ recognizeOneLex
            prevGram <- prevGrams,
            currGram <- lexGrams lex,
            gram <- primMerge prevGram currGram]
+
+    fscore :: [Gram] -> [Gram] -> Ordering
+    fscore g1 g2 = compare sg2 sg1
+      where
+        sg1 = calcScore g1
+        sg2 = calcScore g2
 
     lexGrams :: Lex -> [Gram]
     lexGrams lex
@@ -197,7 +203,6 @@ recognizeOneLex
 
     possGrams WORD morph = Set.toList $ getProp [POST] morph
     possGrams WORD_COMPOUND morph = Set.toList $ getProp [POST] morph
-      -- Set.toList (maybe (Set.empty) id (M.lookup POST grams))
     possGrams uctoGram _ = [uctoGram]
 
     primMerge :: [Gram] -> Gram -> [[Gram]]
@@ -217,7 +222,6 @@ recognizeOneLex
 
     merge :: [Gram] -> Gram -> [[Gram]]
     merge [] (G g t _ m) = [[(G g t Wall m)]]
-
     merge (last:ps) newGram =
       case last of
         (G _ _ (J Sentence _ _) _ ) ->
@@ -227,23 +231,41 @@ recognizeOneLex
 
     grammar :: Gram -> Gram -> [Gram]
     grammar prev curr =
-      let (G jgram pw _ pm) = prev
+      let -- (G jgram pw _ pm) = prev
           (G gram w _ m) = curr
-          gg = [ (G gram w (J res ref (jscore pm m)) m) |
-                 rule <- maybe [NONE] (Set.toList) (M.lookup JOIN grams),
-                 (res, ref) <- applyRule rule prev curr ]
+          gg = [ (G gram w (J res ref ((jscore pm m) * cf)) m) |
+                 rules <- [maybe [NONE] (Set.toList) (M.lookup JOIN grams)],
+                 (res, ref, cf) <- applyRule 1.0 rules prev curr,
+                 let (G jgram pw _ pm) = ref]
       in gg
 
     jscore a b = (score a) * (score b)
 
-    applyRule :: Rule r => r -> Gram -> Gram -> [(r, Gram)]
-    applyRule rule l r = if left l && right r && both l r
-                         then [(rule, l)] else chain l r
-      where
-        (both, left, right) = join rule
-        chain (G g w Wall m) r = []
-        chain (G g w None m) r = []
-        chain (G g w (J gr g' _) _) r = applyRule rule g' r
+    applyRule :: Rule r => Float -> [r] -> Gram -> Gram -> [(r, Gram, Float)]
+    applyRule cf rules l r = if L.null rc then chain l r else rc
+      where rc = [(rule, l, cf) |
+                   rule <- rules,
+                   (both, left, right) <- [join rule],
+                   left l && right r && both l r ]
+            chain (G g w Wall m) r = []
+            chain (G g w None m) r = []
+            chain (G g w (J gr g' _) _) r = applyRule (cf * declineCF) rules g' r
+
+calcScore :: [Gram] -> Float
+calcScore ((G _ _ Wall  _):_) = 0.0
+calcScore ((G _ _ None _):_) = 0.0
+calcScore ((G _ _ (J link _ sc) _):xs) =
+  case link of
+    NONE -> calcScore xs
+    _ -> sc + calcScore xs
+-- calcScore (G _ _ (J link gr sc) _) =
+--   case link of
+--     NONE -> calcScore gr
+--     _ -> sc + calcScore gr
+
+
+declineCF :: Float
+declineCF = 0.8  -- Denotes the score decreasing due to distance of the grams
 
 class Rule r where
   join :: r -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)
@@ -486,7 +508,6 @@ pronouns = Set.fromList [PER1, PER2, PER3, NPRO]
 
 isPronoun :: Gram -> Bool
 isPronoun (G pr _ _ _) = Set.member pr pronouns
-isPronoun _ = False
 
 subjVerbConsist :: Gram -> Gram -> Bool
 subjVerbConsist (G subj wsubj j msubj) (G VERB verb _ mverb)
