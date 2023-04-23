@@ -79,8 +79,15 @@ stdinProc = do
   js <- BL.getContents
   -- BL.putStrLn js
   let obj = NL.translateContent js::Maybe NL.Message
-  US.uprint "OK"
---  US.uprint obj
+  -- US.uprint obj
+  -- putStrLn "\n-------------\n"
+  case obj of
+    Nothing -> return ()
+    Just o -> do
+      let tran = NL.recognize [[]] (NL.text o) :: [[NL.Gram]]
+      printGrams tran
+  -- US.uprint "OK"
+  -- US.uprint obj
 --  putStrLn "\n\n"
 --  US.uprint . NL.toText $ obj
   -- putStrLn "\n\n"

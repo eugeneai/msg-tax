@@ -280,7 +280,7 @@ data GRAM = BAD
   | CURRENCY | WORD | PUNCTUATION | UNKNOWN
   | JOIN
   | AdjNoun | NumrNoun | SubjVerb | NounNounGent | Percent
-  | PhoneNumber | VerbTranObjAccs | Sentence
+  | PhoneNumber | VerbTranObjAccs | Sentence | AdvbVerb
   | JOIN3
   | ForJoin | NounInNoun
   deriving (Show, Read, Ord, Eq)
@@ -316,7 +316,7 @@ grams = M.fromList [
                         , CURRENCY, WORD, PUNCTUATION, UNKNOWN])
   , (JOIN, Set.fromList [AdjNoun, SubjVerb, NounNounGent, Percent
                         , PhoneNumber, NumrNoun, VerbTranObjAccs
-                        , Sentence])
+                        , Sentence, AdvbVerb])
   , (JOIN3, Set.fromList [ForJoin, NounInNoun])
   ]
 
@@ -335,6 +335,7 @@ instance Rule GRAM where
   join Percent = (isAnyRel, isNum100, isPercent)
   join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber)
   join Sentence = (isAnyRel, hasWall, isSentenceEnd)
+  join AdvbVerb = (isAnyRel, isVerb, isAdvb)
   join _ = (lfm, lf, lf)
     where lf _ = False
           lfm _ _ = False
@@ -364,6 +365,10 @@ lexTest sub morph = rc
 isVerb :: Gram -> Bool
 isVerb (G VERB _ _ _) = True
 isVerb _ = False
+
+isAdvb :: Gram -> Bool
+isAdvb (G ADVB _ _ _) = True
+isAdvb _ = False
 
 isVerbTran :: Gram -> Bool
 isVerbTran (G VERB _ _ m) = lexTest[TRAN] m
