@@ -54,7 +54,7 @@ processString (Proc hin hout herr ph) prev str = do
   hPutStrLn hin $ "WORD " ++ str
   hFlush hin
   js <- inputJSON hout
-  -- US.uprint js
+  US.uprint js
   let obj = NL.translateLexs js
   US.uprint obj
   putStrLn "\n-------------\n"

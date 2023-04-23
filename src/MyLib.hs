@@ -154,19 +154,28 @@ recognize :: [[Join]] -> [Lex] -> [[Join]]
 recognize prev lexs = [j |
                        prevJoin <- prev,
                        currLex <- lexs,
-                       currGram <- (lexGrams currLex :: [Gram]),
-                       j <- (merge prevJoin currGram :: [[Join]])]
+                       currGram <- lexGrams currLex,
+                       j <- merge prevJoin currGram]
   where
     lexGrams :: Lex -> [Gram]
-    lexGrams lex = [G aGram (w lex) W m |
-                    m <- morph lex,
-                    aGram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)) :: [GRAM],
-                    lexTest[aGram] m]
+    lexGrams lex =
+      L.sortBy sortf [G aGram (w lex) W m |
+                      m <- morph lex,
+                      aGram <- possGrams (ucto lex) m]
+    sortf
+      (G _ _ _ (Morph _ _ s1))
+      (G _ _ _ (Morph _ _ s2)) = compare s2 s1
+
+    possGrams WORD morph = Set.toList $ getProp [POST] morph
+    possGrams WORD_COMPOUND morph = Set.toList $ getProp [POST] morph
+      -- Set.toList (maybe (Set.empty) id (M.lookup POST grams))
+    possGrams uctoGram _ = [uctoGram]
 
     merge :: [Join] -> Gram -> [[Join]]
     merge [] (G gram w _ m) = [[J NONE (G gram w wall m) (score m), wall]]
       where
         wall = W
+
     merge [wall] (G gram w _ m)
       | wall == W = [[J NONE (G gram w wall m) (score m), wall]]
 
@@ -177,7 +186,7 @@ recognize prev lexs = [j |
       in
         let joins = grammar j gr
         in
-          [(j:js) ++ js | h <- joins]
+          [(h:j:js) | h <- joins]
 
     grammar :: Join -> Gram -> [Join]
     grammar j (G gram w _ m) =      -- TODO run through grammar rules
