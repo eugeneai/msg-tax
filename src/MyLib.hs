@@ -59,7 +59,7 @@ data Subject = Subject {
 
 data Morph = Morph {
     norm:: T.Text
-  , tag:: Set.Set GRAM
+  , tag:: [GRAM]
   , score:: Float
   } deriving (Show, Eq, Generic)
 
@@ -80,16 +80,6 @@ instance FromJSON Message
 instance FromJSON Lex
 
 instance FromJSON Morph
-
--- toTagSet :: Parser Morph -> Set.Set GRAM
--- toTagSet (Parser m) = myUnpack m
---   where
---     -- myUnpack :: [Value] -> Set.Set g
---     myUnpack values = Set.fromList $ concatMap val values
---     -- val :: Value -> [GRAM]
---     val (String s) = [readGram s]
---     -- val val = concatMap val . V.toList $ a
---     -- val _ = [BAD]
 
 instance FromJSON GRAM where
   parseJSON :: Value -> Parser GRAM
@@ -112,12 +102,6 @@ instance ToJSON Subject
 instance ToJSON Message
 instance ToJSON Lex
 instance ToJSON Morph
-
--- instance ToJSON (Set.Set GRAM) where
---   toJSON s = Array . V.fromList . map f . Set.toList $ s
---     where
---       f gram = String . T.pack . show $ gram
-
 
 instance ToJSON GRAM where
   toJSON :: GRAM -> Value
@@ -177,8 +161,7 @@ recognize prev lexs = [j |
     lexGrams lex = [G aGram (w lex) W m |
                     m <- morph lex,
                     aGram <- Set.toList $ (maybe (Set.empty) id (M.lookup POST grams)) :: [GRAM],
-                    let grams = tag m
-                    in lexTest[aGram] m]
+                    lexTest[aGram] m]
 
     merge :: [Join] -> Gram -> [[Join]]
     merge [] (G gram w _ m) = [[J NONE (G gram w wall m) (score m), wall]]
@@ -197,7 +180,7 @@ recognize prev lexs = [j |
           [(j:js) ++ js | h <- joins]
 
     grammar :: Join -> Gram -> [Join]
-    grammar j (G gram w _ m) =
+    grammar j (G gram w _ m) =      -- TODO run through grammar rules
       let (J jgram gram' jsc) = j
       in [J NONE (G gram w j m) (jsc * (score m))]
 
@@ -405,9 +388,9 @@ getProp :: [GRAM] -> Morph -> Set.Set GRAM
 getProp [cls] m =
   case set of
     Nothing -> Set.empty
-    Just s ->
-      let f e = Set.member e s
-      in Set.filter f . tag $ m
+    Just gramset ->
+      let f e = Set.member e gramset
+      in Set.fromList . L.filter f . tag $ m
   where
     set = M.lookup cls grams
 
@@ -440,7 +423,7 @@ subjVerbConsist (G subj wsubj j msubj) (G VERB verb _ mverb)
     pna = [NMBR]
     vpr = getProp pna mverb
     npr = getProp pna msubj
-    consistency = npr =*= vpr
+    consistency = npr == vpr
 
 
 -- Use it for checking non working relations
