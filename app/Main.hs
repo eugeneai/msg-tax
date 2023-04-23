@@ -49,7 +49,7 @@ subProcess = do
   return $ Proc hin hout herr pid
 
 
-processString :: ProcessData -> [[NL.Join]] -> String -> IO ([[NL.Join]])
+processString :: ProcessData -> [[NL.Gram]] -> String -> IO ([[NL.Gram]])
 processString (Proc hin hout herr ph) prev str = do
   hPutStrLn hin $ "WORD " ++ str
   hFlush hin
@@ -61,7 +61,7 @@ processString (Proc hin hout herr ph) prev str = do
   case obj of
     Nothing -> return (prev)
     Just o -> do
-      let tran = NL.recognize prev o :: [[NL.Join]]
+      let tran = NL.recognize prev o :: [[NL.Gram]]
       -- US.uprint tran
       return tran
 
@@ -100,7 +100,7 @@ main = do
     else if elem "-s" args then do
     let str = unwords . tail . L.takeWhile (/="-t") $ args
     pyproc <- subProcess
-    j <- processString pyproc [[NL.W]] $ str
-    US.uprint j
+    j <- processString pyproc [[]] $ str
+    US.uprint $ map reverse j
     processTerminate pyproc
     else putStrLn "Wrong arguments"

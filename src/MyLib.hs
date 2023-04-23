@@ -88,7 +88,8 @@ instance FromJSON GRAM where
 
 readGram :: T.Text -> GRAM
 readGram t =
-  let rm =TR.readMaybe . T.unpack . T.toUpper. T.replace (T.pack "-") (T.pack "_") $ t :: Maybe GRAM
+  let rm = TR.readMaybe . T.unpack . T.toUpper .
+           T.replace (T.pack "-") (T.pack "_") $ t :: Maybe GRAM
   in
     case rm of
       Nothing -> case T.unpack . T.toUpper $ t of
@@ -142,57 +143,71 @@ version = "0.0.1"
 
 data Gram = G GRAM
             T.Text
-            Join   -- reference to the main grammeme
+            Join   -- reference to the main grammeme or W
             Morph  -- Morpheme
-          deriving (Eq, Show)
+          deriving (Eq)
+
+instance Show Gram where
+  show :: Gram -> String
+  show (G g t j m) = "(" ++ show g ++ " " ++ show t ++ " " ++ show j ++ " / " ++ show m ++ ")"
 
 data Join = W -- Wall
           | J GRAM Gram Float
-          deriving (Eq, Show)
+          deriving (Eq)
 
-recognize :: [[Join]] -> [Lex] -> [[Join]]
-recognize prev lexs = [j |
-                       prevJoin <- prev,
-                       currLex <- lexs,
-                       currGram <- lexGrams currLex,
-                       j <- merge prevJoin currGram]
+instance Show Join where
+  show :: Join -> String
+  show W = "⊢"
+  show (J g gr sc) = "←" ++ show g ++ " " ++ show morph ++ " " ++ show sc ++ "|"
+    where
+      (G _ _ _ morph) = gr
+
+
+recognize :: [[Gram]] -> [Lex] -> [[Gram]]
+recognize grams [] = grams
+recognize grams (lex:ls) =
+  let grams1 = recognizeOneLex grams lex
+  in recognize grams1 ls
+
+recognizeOneLex :: [[Gram]] -> Lex -> [[Gram]]
+recognizeOneLex
+  prevGrams
+  lex = [gram |
+          prevGram <- prevGrams,
+          currGram <- lexGrams lex,
+          gram <- merge prevGram currGram]
   where
     lexGrams :: Lex -> [Gram]
-    lexGrams lex =
-      L.sortBy sortf [G aGram (w lex) W m |
+    lexGrams lex
+      | L.null . morph $ lex = [G (ucto lex) (w lex) W (Morph (w lex) [(ucto lex)] 1.0)]
+      | otherwise = L.sortBy sortf [G aGram (w lex) W m |
                       m <- morph lex,
                       aGram <- possGrams (ucto lex) m]
     sortf
       (G _ _ _ (Morph _ _ s1))
-      (G _ _ _ (Morph _ _ s2)) = compare s2 s1
+      (G _ _ _ (Morph _ _ s2)) = compare s2 s1 -- decreasing order
 
     possGrams WORD morph = Set.toList $ getProp [POST] morph
     possGrams WORD_COMPOUND morph = Set.toList $ getProp [POST] morph
       -- Set.toList (maybe (Set.empty) id (M.lookup POST grams))
     possGrams uctoGram _ = [uctoGram]
 
-    merge :: [Join] -> Gram -> [[Join]]
-    merge [] (G gram w _ m) = [[J NONE (G gram w wall m) (score m), wall]]
-      where
-        wall = W
+    merge :: [Gram] -> Gram -> [[Gram]]
+    merge [] (G g t _ m) = [[(G g t W m)]]
+    merge (last:ps) newGram = [g:last:ps | g <- grammar last newGram]
 
-    merge [wall] (G gram w _ m)
-      | wall == W = [[J NONE (G gram w wall m) (score m), wall]]
+    grammar :: Gram -> Gram -> [Gram]
+    grammar prev curr =
+      let (G jgram pw _ pm) = prev
+          (G gram w _ m) = curr
+          gg = [ (G gram w (J res prev (jscore pm m)) m) |
+                 rule <- maybe [NONE] (Set.toList) (M.lookup JOIN grams),
+                 res <- applyRule rule prev curr ]
+      in if L.null gg then [(G gram w W m)] else gg
 
-    merge (j:js) gr =
-      let (J jgram gram' sco) = j
-          (G ggram w W m) = gr
-          -- mjs = merge js gr
-      in
-        let joins = grammar j gr
-        in
-          [(h:j:js) | h <- joins]
+    jscore a b = (score a) * (score b)
 
-    grammar :: Join -> Gram -> [Join]
-    grammar j (G gram w _ m) =      -- TODO run through grammar rules
-      let (J jgram gram' jsc) = j
-      in [J NONE (G gram w j m) (jsc * (score m))]
-
+    applyRule NONE left right = [NONE]
 
 class Rule r where
   join :: r -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)
