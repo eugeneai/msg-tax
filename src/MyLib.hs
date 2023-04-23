@@ -202,7 +202,12 @@ recognizeOneLex
 
     primMerge :: [Gram] -> Gram -> [[Gram]]
     primMerge [] (G g t _ m) = [[(G g t Wall m)]]
-    primMerge (last:ps) newGram = [g:last:ps | g <- noGrammar last newGram]
+    primMerge (last:ps) newGram =
+      case last of
+        (G _ _ (J Sentence _ _) _ ) ->
+          let (G g t _ m) = newGram
+          in [(G g t Wall m):last:ps]
+        _ -> [g:last:ps | g <- noGrammar last newGram]
 
     noGrammar :: Gram -> Gram -> [Gram]
     noGrammar prev curr =
@@ -212,7 +217,13 @@ recognizeOneLex
 
     merge :: [Gram] -> Gram -> [[Gram]]
     merge [] (G g t _ m) = [[(G g t Wall m)]]
-    merge (last:ps) newGram = [g:last:ps | g <- grammar last newGram]
+
+    merge (last:ps) newGram =
+      case last of
+        (G _ _ (J Sentence _ _) _ ) ->
+          let (G g t _ m) = newGram
+          in [(G g t Wall m):last:ps]
+        _ -> [g:last:ps | g <- grammar last newGram]
 
     grammar :: Gram -> Gram -> [Gram]
     grammar prev curr =
