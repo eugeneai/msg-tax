@@ -207,7 +207,12 @@ recognizeOneLex
 
     jscore a b = (score a) * (score b)
 
-    applyRule NONE left right = [NONE]
+    applyRule rule l r = if left l && right r && both l r
+                         then [rule] else chain l r
+      where
+        (both, left, right) = join rule
+        chain (G g w W m) r = []
+        chain (G g w (J gr g' _) _) r = applyRule rule g' r
 
 class Rule r where
   join :: r -> (Gram->Gram->Bool, Gram->Bool, Gram->Bool)
