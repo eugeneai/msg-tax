@@ -54,10 +54,10 @@ processString (Proc hin hout herr ph) prev str = do
   hPutStrLn hin $ "WORD " ++ str
   hFlush hin
   js <- inputJSON hout
-  US.uprint js
+  -- US.uprint js
   let obj = NL.translateLexs js
-  US.uprint obj
-  putStrLn "\n-------------\n"
+  -- US.uprint obj
+  -- putStrLn "\n-------------\n"
   case obj of
     Nothing -> return (prev)
     Just o -> do
@@ -93,6 +93,14 @@ stdinProc = do
   --     let appl2 = repeatPass NL.joinPass appl
   --     US.uprint appl2
 
+printGrams :: [[NL.Gram]] -> IO ()
+printGrams [] = do
+  return ()
+printGrams (grs:rest) = do
+  US.uprint . reverse $ grs
+  putStrLn ""
+  printGrams rest
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -101,6 +109,6 @@ main = do
     let str = unwords . tail . L.takeWhile (/="-t") $ args
     pyproc <- subProcess
     j <- processString pyproc [[]] $ str
-    US.uprint $ map reverse j
+    printGrams j
     processTerminate pyproc
     else putStrLn "Wrong arguments"

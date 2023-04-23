@@ -51,6 +51,7 @@ import Data.Aeson
 import Data.Aeson.Types (
   Parser,
   Array)
+import Data.Char (isPunctuation)
 
 data Subject = Subject {
   name:: T.Text,
@@ -149,19 +150,20 @@ data Gram = G GRAM
 
 instance Show Gram where
   show :: Gram -> String
-  show (G g t j m) = "(" ++ show g ++ " " ++ show t ++ " " ++ show j ++ " / " ++ show m ++ ")"
+  show (G g t j m) = "\n(" ++ show g ++ " " ++ show t ++ " " ++ show j ++ " / " ++ show m ++ ")"
 
-data Join = W -- Wall
+data Join = None
+          | Wall
           | J GRAM Gram Float
           deriving (Eq)
 
 instance Show Join where
   show :: Join -> String
-  show W = "⊢"
-  show (J g gr sc) = "←" ++ show g ++ " " ++ show morph ++ " " ++ show sc ++ "|"
+  show Wall = "⊢"
+  show None = "⊥"
+  show (J g gr sc) = "〈" ++ show g ++ "→" ++ show morph ++ " " ++ show sc ++ "〉"
     where
       (G _ _ _ morph) = gr
-
 
 recognize :: [[Gram]] -> [Lex] -> [[Gram]]
 recognize grams [] = grams
@@ -172,15 +174,21 @@ recognize grams (lex:ls) =
 recognizeOneLex :: [[Gram]] -> Lex -> [[Gram]]
 recognizeOneLex
   prevGrams
-  lex = [gram |
-          prevGram <- prevGrams,
-          currGram <- lexGrams lex,
-          gram <- merge prevGram currGram]
+  lex = if L.null rc then nrc else rc
   where
+    rc = [gram |
+           prevGram <- prevGrams,
+           currGram <- lexGrams lex,
+           gram <- merge prevGram currGram]
+    nrc = [gram |
+           prevGram <- prevGrams,
+           currGram <- lexGrams lex,
+           gram <- primMerge prevGram currGram]
+
     lexGrams :: Lex -> [Gram]
     lexGrams lex
-      | L.null . morph $ lex = [G (ucto lex) (w lex) W (Morph (w lex) [(ucto lex)] 1.0)]
-      | otherwise = L.sortBy sortf [G aGram (w lex) W m |
+      | L.null . morph $ lex = [G (ucto lex) (w lex) None (Morph (w lex) [(ucto lex)] 1.0)]
+      | otherwise = L.sortBy sortf [G aGram (w lex) None m |
                       m <- morph lex,
                       aGram <- possGrams (ucto lex) m]
     sortf
@@ -192,26 +200,38 @@ recognizeOneLex
       -- Set.toList (maybe (Set.empty) id (M.lookup POST grams))
     possGrams uctoGram _ = [uctoGram]
 
+    primMerge :: [Gram] -> Gram -> [[Gram]]
+    primMerge [] (G g t _ m) = [[(G g t Wall m)]]
+    primMerge (last:ps) newGram = [g:last:ps | g <- noGrammar last newGram]
+
+    noGrammar :: Gram -> Gram -> [Gram]
+    noGrammar prev curr =
+      let (G gram w _ m) = curr
+          gg = [ (G gram w (J NONE prev (score m)) m) ]
+      in gg
+
     merge :: [Gram] -> Gram -> [[Gram]]
-    merge [] (G g t _ m) = [[(G g t W m)]]
+    merge [] (G g t _ m) = [[(G g t Wall m)]]
     merge (last:ps) newGram = [g:last:ps | g <- grammar last newGram]
 
     grammar :: Gram -> Gram -> [Gram]
     grammar prev curr =
       let (G jgram pw _ pm) = prev
           (G gram w _ m) = curr
-          gg = [ (G gram w (J res prev (jscore pm m)) m) |
+          gg = [ (G gram w (J res ref (jscore pm m)) m) |
                  rule <- maybe [NONE] (Set.toList) (M.lookup JOIN grams),
-                 res <- applyRule rule prev curr ]
-      in if L.null gg then [(G gram w W m)] else gg
+                 (res, ref) <- applyRule rule prev curr ]
+      in gg
 
     jscore a b = (score a) * (score b)
 
+    applyRule :: Rule r => r -> Gram -> Gram -> [(r, Gram)]
     applyRule rule l r = if left l && right r && both l r
-                         then [rule] else chain l r
+                         then [(rule, l)] else chain l r
       where
         (both, left, right) = join rule
-        chain (G g w W m) r = []
+        chain (G g w Wall m) r = []
+        chain (G g w None m) r = []
         chain (G g w (J gr g' _) _) r = applyRule rule g' r
 
 class Rule r where
@@ -249,7 +269,7 @@ data GRAM = BAD
   | CURRENCY | WORD | PUNCTUATION | UNKNOWN
   | JOIN
   | AdjNoun | NumrNoun | SubjVerb | NounNounGent | Percent
-  | PhoneNumber | VerbTranObjAccs
+  | PhoneNumber | VerbTranObjAccs | Sentence
   | JOIN3
   | ForJoin | NounInNoun
   deriving (Show, Read, Ord, Eq)
@@ -284,7 +304,8 @@ grams = M.fromList [
                         , NUMBER_YEAR, TIME, FRACNUMBER, NUMBER
                         , CURRENCY, WORD, PUNCTUATION, UNKNOWN])
   , (JOIN, Set.fromList [AdjNoun, SubjVerb, NounNounGent, Percent
-                        , PhoneNumber, NumrNoun, VerbTranObjAccs ])
+                        , PhoneNumber, NumrNoun, VerbTranObjAccs
+                        , Sentence])
   , (JOIN3, Set.fromList [ForJoin, NounInNoun])
   ]
 
@@ -302,6 +323,7 @@ instance Rule GRAM where
   join NounNounGent = (isAnyRel, isNoun, isNounGent)
   join Percent = (isAnyRel, isNum100, isPercent)
   join PhoneNumber = (isAnyRel, isWord "+", isPhoneNumber)
+  join Sentence = (isAnyRel, hasWall, isSentenceEnd)
   join _ = (lfm, lf, lf)
     where lf _ = False
           lfm _ _ = False
@@ -399,9 +421,16 @@ isPercent :: Gram -> Bool
 isPercent (G PUNCTUATION percent _ _) = percent == T.pack "%"
 isPercent _ = False
 
+isSentenceEnd :: Gram -> Bool
+isSentenceEnd (G PUNCTUATION ch _ _) = L.elem (L.head (T.unpack ch)) (".!?"::String)
+isSentenceEnd _ = False
+
 isWord :: String -> Gram -> Bool
 isWord word (G _ w _ _ ) = w == T.pack word
 
+hasWall :: Gram -> Bool
+hasWall (G _ _ Wall _) = True
+hasWall _ = False
 
 adjNounConsist :: Gram -> Gram -> Bool
 adjNounConsist adj noun = sameDeclination adj noun
