@@ -46,6 +46,7 @@ import Prelude.Compat
       (.),
       (+),
       (&&),
+      (/=),
       (||) )
 import Data.Ord ( Ord((<=), compare), Ordering(GT, LT) )
 import qualified Data.List as L
@@ -165,6 +166,9 @@ instance Show Join where
     where
       (G _ _ _ morph) = gr
 
+topNSentences :: Int
+topNSentences = 2
+
 recognize :: [[Gram]] -> [Lex] -> [[Gram]]
 recognize grams [] = grams
 recognize grams (lex:ls) =
@@ -174,9 +178,13 @@ recognize grams (lex:ls) =
 recognizeOneLex :: [[Gram]] -> Lex -> [[Gram]]
 recognizeOneLex
   prevGrams
-  lex = L.take 2 $ L.sortBy fscore $ if L.null rc then nrc else rc
+  lex = rcall -- rc
   where
-    rc = [gram |
+    rc = if L.null bws then jbws else rc
+    jbws = L.take topNSentences $ L.sortBy fscore $ bckwrd bws ++ nbws
+    (bws, nbws) = splitBackward rcall
+    rcall = L.take topNSentences $ L.sortBy fscore $ if L.null frc then nrc else rc
+    frc = [gram |
            prevGram <- prevGrams,
            currGram <- lexGrams lex,
            gram <- merge prevGram currGram]
@@ -250,6 +258,17 @@ recognizeOneLex
             chain (G g w Wall m) r = []
             chain (G g w None m) r = []
             chain (G g w (J gr g' _) _) r = applyRule (cf * declineCF) rules g' r
+
+    splitBackward = L.partition checkBackwardf
+    checkBackwardf [] = False
+    checkBackwardf ((G _ _ Wall _):_) = False
+    checkBackwardf ((G _ _ (J j gr _ ) _):_) = (j /= NONE) && chnext gr
+      where
+        chnext (G _ _ (J NONE _ _ ) _) = True
+        chnext _ = False
+
+    bckwrd l = l
+
 
 calcScore :: [Gram] -> Float
 calcScore ((G _ _ Wall  _):_) = 0.0
