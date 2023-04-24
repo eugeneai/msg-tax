@@ -178,12 +178,12 @@ recognize grams (lex:ls) =
 recognizeOneLex :: [[Gram]] -> Lex -> [[Gram]]
 recognizeOneLex
   prevGrams
-  lex = rcall -- rc
+  lex = rcdef
   where
     rc = if L.null bws then jbws else rc
     jbws = L.take topNSentences $ L.sortBy fscore $ bckwrd bws ++ nbws
-    (bws, nbws) = splitBackward rcall
-    rcall = L.take topNSentences $ L.sortBy fscore $ if L.null frc then nrc else rc
+    (bws, nbws) = splitBackward rcdef
+    rcdef = L.take topNSentences $ L.sortBy fscore $ if L.null frc then nrc else frc
     frc = [gram |
            prevGram <- prevGrams,
            currGram <- lexGrams lex,
